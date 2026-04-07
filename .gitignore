@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.env
+*.tsbuildinfo
+CLAUDE.md
+.claude/
+stellar_hackathon_prioritization_analysis.md
