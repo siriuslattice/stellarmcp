@@ -1,0 +1,49 @@
+{
+  "name": "stellarmcp",
+  "version": "0.1.0",
+  "description": "MCP server giving AI agents access to Stellar blockchain data — accounts, DEX, transactions, assets — with x402 micropayments settled on Stellar",
+  "homepage": "https://github.com/siriuslattice/stellarmcp",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/siriuslattice/stellarmcp.git"
+  },
+  "license": "MIT",
+  "runtime": "node",
+  "command": "npx stellarmcp",
+  "transport": ["stdio"],
+  "tools": [
+    {
+      "name": "getAccount",
+      "description": "Get Stellar account details including balances, thresholds, and signers"
+    },
+    {
+      "name": "getTransactions",
+      "description": "Get recent transactions for a Stellar account"
+    },
+    {
+      "name": "getPayments",
+      "description": "Get recent payments for a Stellar account"
+    },
+    {
+      "name": "getOrderbook",
+      "description": "Get Stellar DEX orderbook for an asset pair with spread and midprice"
+    },
+    {
+      "name": "getTradeAggregations",
+      "description": "Get OHLC trade aggregation data for a Stellar DEX asset pair"
+    },
+    {
+      "name": "getAssetInfo",
+      "description": "Get metadata for a Stellar asset including supply, accounts, and flags"
+    },
+    {
+      "name": "getNetworkStatus",
+      "description": "Get Stellar network status (free)"
+    },
+    {
+      "name": "getLedger",
+      "description": "Get details of a specific Stellar ledger by sequence number"
+    }
+  ],
+  "tags": ["stellar", "blockchain", "x402", "micropayments", "ai-agents", "defi", "dex"]
+}
