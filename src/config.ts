@@ -9,7 +9,7 @@ const schema = z.object({
   ozFacilitatorUrl: z.string().url().optional(),
   ozApiKey: z.string().optional(),
   port: z.coerce.number().default(4021),
-  host: z.string().default("0.0.0.0"),
+  host: z.string().default("0.0.0.0"), // Binds to all interfaces — use "localhost" for local-only access
   logLevel: z.enum(["debug", "info", "warn", "error"]).default("info"),
 });
 

@@ -21,7 +21,7 @@ describe("parseAsset", () => {
   });
 
   it("should parse credit_alphanum12 asset", () => {
-    const result = parseAsset("AQUARIUS:GBNZILSTVQZ4R7IKQDGHYGY2QXL5QOFJYQMXPKWRRM5PAV7Y4M67TCS");
+    const result = parseAsset("AQUARIUS:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN");
     expect(result.code).toBe("AQUARIUS");
     expect(result.assetType).toBe("credit_alphanum12");
   });
@@ -32,6 +32,48 @@ describe("parseAsset", () => {
 
   it("should throw on too many colons", () => {
     expect(() => parseAsset("A:B:C")).toThrow("Invalid asset format");
+  });
+
+  it("should throw on asset code longer than 12 characters", () => {
+    expect(() =>
+      parseAsset("ABCDEFGHIJKLM:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"),
+    ).toThrow("Invalid asset code");
+  });
+
+  it("should throw on asset code with special characters", () => {
+    expect(() =>
+      parseAsset("US$C:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"),
+    ).toThrow("Invalid asset code");
+  });
+
+  it("should throw on empty asset code", () => {
+    expect(() =>
+      parseAsset(":GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"),
+    ).toThrow("Invalid asset code");
+  });
+
+  it("should throw on issuer with wrong length", () => {
+    expect(() => parseAsset("USDC:GABCD")).toThrow("Invalid issuer address");
+  });
+
+  it("should throw on issuer not starting with G", () => {
+    expect(() =>
+      parseAsset("USDC:SA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"),
+    ).toThrow("Invalid issuer address");
+  });
+
+  it("should throw on issuer with invalid Base32 characters", () => {
+    // '0', '1', '8', '9' and lowercase are not in the Base32 alphabet A-Z, 2-7
+    expect(() =>
+      parseAsset("USDC:G00ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"),
+    ).toThrow("Invalid issuer address");
+  });
+
+  it("should accept valid 12-char asset code (credit_alphanum12)", () => {
+    const result = parseAsset("ABCDEFGHIJKL:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN");
+    expect(result.code).toBe("ABCDEFGHIJKL");
+    expect(result.assetType).toBe("credit_alphanum12");
+    expect(result.isNative).toBe(false);
   });
 });
 

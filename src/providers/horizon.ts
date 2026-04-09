@@ -13,6 +13,14 @@ import type {
   HorizonLedger,
 } from "../types.js";
 
+const CACHE_TTL = {
+  DEFAULT: 15_000,    // 15s — accounts, transactions, payments
+  ORDERBOOK: 5_000,   // 5s — orderbooks change rapidly
+  ROOT: 10_000,       // 10s — network status
+  LEDGER: 30_000,     // 30s — ledgers are immutable once closed
+  ASSETS: 60_000,     // 60s — asset metadata changes rarely
+} as const;
+
 export class HorizonClient {
   private baseUrl: string;
 
@@ -24,7 +32,10 @@ export class HorizonClient {
     const url = new URL(path, this.baseUrl);
     if (params) {
       for (const [k, v] of Object.entries(params)) {
-        if (v !== undefined) url.searchParams.set(k, v);
+        if (v !== undefined) {
+          if (typeof v !== "string") continue; // Skip non-string params (arrays from duplicate query params)
+          url.searchParams.set(k, v);
+        }
       }
     }
 
@@ -41,7 +52,8 @@ export class HorizonClient {
       if (res.status === 429) {
         attempt++;
         if (attempt > maxRetries) throw new Error(`Horizon rate limited after ${maxRetries} retries`);
-        const delay = Math.min(1000 * 2 ** attempt, 10_000);
+        const jitter = Math.random() * 1000;
+        const delay = Math.min(1000 * 2 ** attempt + jitter, 10_000);
         logger.warn(`Horizon 429, retry ${attempt} in ${delay}ms`);
         await new Promise((r) => setTimeout(r, delay));
         continue;
@@ -77,21 +89,21 @@ export class HorizonClient {
   }
 
   async getRoot() {
-    return this.get<HorizonRoot>("/", undefined, 10_000);
+    return this.get<HorizonRoot>("/", undefined, CACHE_TTL.ROOT);
   }
 
   async getLedger(sequence: number) {
-    return this.get<HorizonLedger>(`/ledgers/${sequence}`, undefined, 30_000);
+    return this.get<HorizonLedger>(`/ledgers/${sequence}`, undefined, CACHE_TTL.LEDGER);
   }
 
   async getAssets(assetCode: string, assetIssuer?: string) {
     const params: Record<string, string> = { asset_code: assetCode };
     if (assetIssuer) params.asset_issuer = assetIssuer;
-    return this.get<HorizonPage<HorizonAsset>>("/assets", params, 60_000);
+    return this.get<HorizonPage<HorizonAsset>>("/assets", params, CACHE_TTL.ASSETS);
   }
 
   async getOrderbook(params: Record<string, string>) {
-    return this.get<HorizonOrderbook>("/order_book", params, 5_000);
+    return this.get<HorizonOrderbook>("/order_book", params, CACHE_TTL.ORDERBOOK);
   }
 
   async getTradeAggregations(params: Record<string, string>) {

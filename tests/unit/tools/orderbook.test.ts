@@ -78,7 +78,7 @@ describe("getOrderbook tool", () => {
 
     const result = (await toolHandler({
       sellingAsset: "XLM",
-      buyingAsset: "USDC:GA5Z",
+      buyingAsset: "USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
       limit: 20,
     })) as { content: { type: string; text: string }[] };
     const parsed = JSON.parse(result.content[0].text);

@@ -90,7 +90,7 @@ describe("getTradeAggregations tool", () => {
 
     const result = (await toolHandler({
       baseAsset: "XLM",
-      counterAsset: "USDC:GA5Z",
+      counterAsset: "USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
       resolution: "1d",
       limit: 10,
     })) as { content: { type: string; text: string }[] };

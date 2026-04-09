@@ -7,6 +7,17 @@ import { parseAsset } from "../utils/formatters.js";
 import { TOOL_PRICES, FREE_ROUTES } from "../x402/pricing.js";
 import { logger } from "../utils/logger.js";
 
+function validateAccountId(accountId: unknown): string | null {
+  if (typeof accountId !== "string" || !accountId.match(/^G[A-Z2-7]{55}$/)) return null;
+  return accountId;
+}
+
+function parseLimit(raw: unknown, defaultVal: number, max: number): number {
+  const n = parseInt(String(raw), 10);
+  if (isNaN(n) || n < 1) return defaultVal;
+  return Math.min(n, max);
+}
+
 const RESOLUTION_MAP: Record<string, number> = {
   "1m": 60000,
   "5m": 300000,
@@ -16,21 +27,21 @@ const RESOLUTION_MAP: Record<string, number> = {
   "1w": 604800000,
 };
 
-function errorStatus(msg: string): number {
-  if (msg.includes("404")) return 404;
-  if (msg.includes("400")) return 400;
-  return 500;
-}
-
 function errJson(res: Response, error: unknown) {
   const msg = error instanceof Error ? error.message : "Unknown error";
-  res.status(errorStatus(msg)).json({ error: msg.slice(0, 200) });
+  logger.error("Request error", { error: msg });
+  if (msg.includes("404")) { res.status(404).json({ error: "Not found" }); return; }
+  if (msg.includes("429")) { res.status(429).json({ error: "Rate limited — try again later" }); return; }
+  if (msg.includes("400")) { res.status(400).json({ error: "Invalid request" }); return; }
+  res.status(500).json({ error: "Internal server error" });
 }
 
 export async function createHttpServer(config: Config, horizon: HorizonClient): Promise<Express> {
   const app = express();
-  app.use(cors());
-  app.use(rateLimit({ windowMs: 60_000, max: 60, message: { error: "rate_limited" } }));
+  app.use(cors({
+    origin: process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(",") : "*",
+  }));
+  app.use(rateLimit({ windowMs: 60_000, max: 60, message: { error: "rate_limited" }, keyGenerator: (req) => req.ip || "unknown" }));
 
   // x402 payment middleware (when facilitator is configured)
   // MUST be awaited before route registration so middleware runs first
@@ -72,8 +83,8 @@ export async function createHttpServer(config: Config, horizon: HorizonClient): 
 
   app.get("/tools/getAccount", async (req: Request, res: Response) => {
     try {
-      const accountId = req.query.accountId as string;
-      if (!accountId) { res.status(400).json({ error: "missing accountId" }); return; }
+      const accountId = validateAccountId(req.query.accountId);
+      if (!accountId) { res.status(400).json({ error: "invalid accountId" }); return; }
       const data = await horizon.getAccount(accountId);
       res.json({
         address: data.account_id,
@@ -93,9 +104,9 @@ export async function createHttpServer(config: Config, horizon: HorizonClient): 
 
   app.get("/tools/getTransactions", async (req: Request, res: Response) => {
     try {
-      const accountId = req.query.accountId as string;
-      if (!accountId) { res.status(400).json({ error: "missing accountId" }); return; }
-      const limit = Math.min(Number(req.query.limit) || 10, 50);
+      const accountId = validateAccountId(req.query.accountId);
+      if (!accountId) { res.status(400).json({ error: "invalid accountId" }); return; }
+      const limit = parseLimit(req.query.limit, 10, 50);
       const data = await horizon.getTransactions(accountId, limit);
       res.json(
         data._embedded.records.map((tx) => ({
@@ -115,9 +126,9 @@ export async function createHttpServer(config: Config, horizon: HorizonClient): 
 
   app.get("/tools/getPayments", async (req: Request, res: Response) => {
     try {
-      const accountId = req.query.accountId as string;
-      if (!accountId) { res.status(400).json({ error: "missing accountId" }); return; }
-      const limit = Math.min(Number(req.query.limit) || 10, 50);
+      const accountId = validateAccountId(req.query.accountId);
+      if (!accountId) { res.status(400).json({ error: "invalid accountId" }); return; }
+      const limit = parseLimit(req.query.limit, 10, 50);
       const data = await horizon.getPayments(accountId, limit);
       res.json(
         data._embedded.records.map((op) => ({
@@ -147,7 +158,7 @@ export async function createHttpServer(config: Config, horizon: HorizonClient): 
         res.status(400).json({ error: "missing sellingAsset or buyingAsset" });
         return;
       }
-      const limit = Math.min(Number(req.query.limit) || 20, 200);
+      const limit = parseLimit(req.query.limit, 20, 200);
       const selling = parseAsset(sellingAsset);
       const buying = parseAsset(buyingAsset);
 
@@ -191,7 +202,7 @@ export async function createHttpServer(config: Config, horizon: HorizonClient): 
       const resolution = (req.query.resolution as string) || "1h";
       const resolutionMs = RESOLUTION_MAP[resolution];
       if (!resolutionMs) { res.status(400).json({ error: "invalid resolution" }); return; }
-      const limit = Math.min(Number(req.query.limit) || 24, 200);
+      const limit = parseLimit(req.query.limit, 24, 200);
 
       const base = parseAsset(baseAsset);
       const counter = parseAsset(counterAsset);
@@ -349,8 +360,8 @@ async function setupX402(app: Express, config: Config) {
     app.use(paymentMiddleware(routePricing as any, resourceServer));
     logger.info("x402 payment middleware enabled");
   } catch (error) {
-    logger.warn("x402 packages not installed — running without payment gating", {
-      error: error instanceof Error ? error.message : String(error),
-    });
+    const msg = error instanceof Error ? error.message : String(error);
+    logger.error("x402 setup failed", { error: msg });
+    throw new Error(`x402 configuration provided but setup failed: ${msg}`);
   }
 }

@@ -29,6 +29,6 @@ if (config.transport === "stdio") {
   const app = await createHttpServer(config, horizon);
   app.listen(config.port, config.host, () => {
     logger.info(`StellarMCP started (HTTP) on ${config.host}:${config.port}`);
-    logger.info(`x402 payee: ${config.stellarPayeeAddress}`);
+    logger.info(`x402 payee: ${config.stellarPayeeAddress?.slice(0, 8)}...${config.stellarPayeeAddress?.slice(-4)}`);
   });
 }

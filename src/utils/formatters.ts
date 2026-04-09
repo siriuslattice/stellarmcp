@@ -13,6 +13,16 @@ export function parseAsset(input: string): {
   }
   const code = parts[0];
   const issuer = parts[1];
+  if (!/^[a-zA-Z0-9]{1,12}$/.test(code)) {
+    throw new Error(
+      `Invalid asset code: "${code}". Must be 1-12 alphanumeric characters.`,
+    );
+  }
+  if (!/^G[A-Z2-7]{55}$/.test(issuer)) {
+    throw new Error(
+      `Invalid issuer address: "${issuer}". Must be 56 characters starting with G (Base32 alphabet).`,
+    );
+  }
   const assetType = code.length <= 4 ? "credit_alphanum4" : "credit_alphanum12";
   return { code, issuer, isNative: false, assetType };
 }
