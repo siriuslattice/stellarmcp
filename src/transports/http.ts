@@ -27,14 +27,15 @@ function errJson(res: Response, error: unknown) {
   res.status(errorStatus(msg)).json({ error: msg.slice(0, 200) });
 }
 
-export function createHttpServer(config: Config, horizon: HorizonClient): Express {
+export async function createHttpServer(config: Config, horizon: HorizonClient): Promise<Express> {
   const app = express();
   app.use(cors());
   app.use(rateLimit({ windowMs: 60_000, max: 60, message: { error: "rate_limited" } }));
 
   // x402 payment middleware (when facilitator is configured)
+  // MUST be awaited before route registration so middleware runs first
   if (config.stellarPayeeAddress && config.ozFacilitatorUrl && config.ozApiKey) {
-    setupX402(app, config);
+    await setupX402(app, config);
   } else {
     logger.warn("x402 not configured — all endpoints are free");
   }

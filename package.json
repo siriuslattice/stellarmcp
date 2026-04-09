@@ -23,7 +23,9 @@
     "test:watch": "vitest",
     "demo": "tsx examples/agent-demo.ts",
     "demo:service": "tsx examples/mock-external-service.ts",
-    "keygen": "tsx scripts/keygen.ts"
+    "keygen": "tsx scripts/keygen.ts",
+    "x402:client": "tsx scripts/x402-client.ts",
+    "setup:usdc": "tsx scripts/setup-usdc.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.28.0",
