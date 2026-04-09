@@ -1,10 +1,10 @@
 {
-  "name": "stellarmcp",
+  "name": "@siriuslattice/stellarmcp",
   "version": "0.1.0",
   "description": "MCP server giving AI agents access to Stellar blockchain data — accounts, DEX, transactions, assets — with x402 micropayments settled on Stellar",
   "type": "module",
   "bin": {
-    "stellarmcp": "./dist/index.js"
+    "stellarmcp": "dist/index.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
