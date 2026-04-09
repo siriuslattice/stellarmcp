@@ -1,6 +1,6 @@
 {
   "name": "stellar-mcp-x402",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MCP server giving AI agents access to Stellar blockchain data — accounts, DEX, transactions, assets — with x402 micropayments settled on Stellar",
   "type": "module",
   "bin": {
@@ -25,7 +25,8 @@
     "demo:service": "tsx examples/mock-external-service.ts",
     "keygen": "tsx scripts/keygen.ts",
     "x402:client": "tsx scripts/x402-client.ts",
-    "setup:usdc": "tsx scripts/setup-usdc.ts"
+    "setup:usdc": "tsx scripts/setup-usdc.ts",
+    "x402:stress": "tsx scripts/x402-stress-test.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.28.0",
