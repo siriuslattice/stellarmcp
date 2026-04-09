@@ -10,7 +10,7 @@ import { logger } from "./utils/logger.js";
 
 const server = new McpServer({
   name: "stellarmcp",
-  version: "0.1.0",
+  version: "0.1.1",
   description: "Stellar blockchain data for AI agents — x402 monetized",
 });
 
