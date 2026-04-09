@@ -21,7 +21,7 @@ Full Model Context Protocol server with 8 tools. Connect via any MCP client.
   "mcpServers": {
     "stellarmcp": {
       "command": "npx",
-      "args": ["@siriuslattice/stellarmcp"],
+      "args": ["stellar-mcp-x402"],
       "env": {
         "STELLAR_NETWORK": "testnet"
       }

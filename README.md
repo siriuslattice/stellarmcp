@@ -20,7 +20,7 @@ Built for the [Stellar Hacks: Agents](https://dorahacks.io/hackathon/stellar-hac
 ### MCP Client (stdio — free, local)
 
 ```bash
-npx @siriuslattice/stellarmcp
+npx stellar-mcp-x402
 ```
 
 Or add to your MCP client config:
@@ -30,7 +30,7 @@ Or add to your MCP client config:
   "mcpServers": {
     "stellarmcp": {
       "command": "npx",
-      "args": ["@siriuslattice/stellarmcp"],
+      "args": ["stellar-mcp-x402"],
       "env": {
         "STELLAR_NETWORK": "testnet"
       }

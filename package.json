@@ -1,5 +1,5 @@
 {
-  "name": "@siriuslattice/stellarmcp",
+  "name": "stellar-mcp-x402",
   "version": "0.1.0",
   "description": "MCP server giving AI agents access to Stellar blockchain data — accounts, DEX, transactions, assets — with x402 micropayments settled on Stellar",
   "type": "module",

@@ -9,7 +9,7 @@
   },
   "license": "MIT",
   "runtime": "node",
-  "command": "npx @siriuslattice/stellarmcp",
+  "command": "npx stellar-mcp-x402",
   "transport": ["stdio"],
   "tools": [
     {
