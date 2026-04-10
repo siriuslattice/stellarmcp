@@ -3,14 +3,22 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { HorizonClient } from "../providers/horizon.js";
 import type { Config } from "../config.js";
 import { PriceService } from "../providers/price.js";
+import { SdexOracle, ReflectorOracle } from "../providers/oracle.js";
+import { PriceAggregator } from "../providers/aggregator.js";
 import { toolError } from "../utils/errors.js";
 
 export function registerPriceTools(
   server: McpServer,
   horizon: HorizonClient,
-  _config: Config,
+  config: Config,
 ) {
   const priceService = new PriceService(horizon);
+  const sdexOracle = new SdexOracle(priceService);
+  const reflectorOracle = new ReflectorOracle({
+    contractId: config.reflectorContractId,
+    sorobanRpcUrl: config.sorobanRpcUrl,
+  });
+  const aggregator = new PriceAggregator([sdexOracle, reflectorOracle]);
 
   server.tool(
     "getPrice",
@@ -27,12 +35,12 @@ export function registerPriceTools(
     },
     async ({ baseAsset, counterAsset }) => {
       try {
-        const result = await priceService.getPrice(baseAsset, counterAsset);
+        const result = await aggregator.getPrice(baseAsset, counterAsset);
         const formatted = {
-          base: baseAsset,
-          counter: counterAsset,
+          base: result.base,
+          counter: result.counter,
           price: result.price,
-          source: result.source,
+          sources: result.sources,
           timestamp: result.timestamp,
         };
         return {

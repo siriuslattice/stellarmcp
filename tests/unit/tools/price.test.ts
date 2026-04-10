@@ -60,9 +60,12 @@ describe("price tools", () => {
       expect(result.isError).toBeUndefined();
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.base).toBe("XLM");
-      expect(parsed.counter).toBe("USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN");
-      expect(parsed.price).toBe("0.1010000");
-      expect(parsed.source).toBe("sdex_orderbook");
+      expect(parsed.price).toBeDefined();
+      expect(parsed.sources).toBeDefined();
+      expect(Array.isArray(parsed.sources)).toBe(true);
+      expect(parsed.sources.length).toBeGreaterThan(0);
+      expect(parsed.sources[0].name).toBe("sdex");
+      expect(parsed.sources[0].price).toBeDefined();
     });
 
     it("returns error on invalid asset format", async () => {

@@ -12,6 +12,7 @@ const schema = z.object({
   host: z.string().default("0.0.0.0"), // Binds to all interfaces — use "localhost" for local-only access
   logLevel: z.enum(["debug", "info", "warn", "error"]).default("info"),
   sorobanRpcUrl: z.string().url().optional(),
+  reflectorContractId: z.string().optional(),
 });
 
 export const config = schema.parse({
@@ -25,6 +26,7 @@ export const config = schema.parse({
   host: process.env.HOST,
   logLevel: process.env.LOG_LEVEL,
   sorobanRpcUrl: process.env.SOROBAN_RPC_URL,
+  reflectorContractId: process.env.REFLECTOR_CONTRACT_ID,
 });
 
 export type Config = typeof config;

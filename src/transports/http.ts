@@ -4,6 +4,8 @@ import rateLimit from "express-rate-limit";
 import type { Config } from "../config.js";
 import type { HorizonClient } from "../providers/horizon.js";
 import { PriceService } from "../providers/price.js";
+import { SdexOracle, ReflectorOracle } from "../providers/oracle.js";
+import { PriceAggregator } from "../providers/aggregator.js";
 import { parseAsset } from "../utils/formatters.js";
 import { TOOL_PRICES, FREE_ROUTES } from "../x402/pricing.js";
 import { logger } from "../utils/logger.js";
@@ -453,6 +455,12 @@ export async function createHttpServer(config: Config, horizon: HorizonClient): 
   // --- Price tools ---
 
   const priceService = new PriceService(horizon);
+  const sdexOracle = new SdexOracle(priceService);
+  const reflectorOracle = new ReflectorOracle({
+    contractId: config.reflectorContractId,
+    sorobanRpcUrl: config.sorobanRpcUrl,
+  });
+  const aggregator = new PriceAggregator([sdexOracle, reflectorOracle]);
 
   app.get("/tools/getPrice", async (req: Request, res: Response) => {
     try {
@@ -464,7 +472,7 @@ export async function createHttpServer(config: Config, horizon: HorizonClient): 
       }
       parseAsset(baseAsset);
       parseAsset(counterAsset);
-      const result = await priceService.getPrice(baseAsset, counterAsset);
+      const result = await aggregator.getPrice(baseAsset, counterAsset);
       res.json(result);
     } catch (error) {
       errJson(res, error);
