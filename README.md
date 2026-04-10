@@ -113,6 +113,14 @@ curl http://localhost:4021/pricing
 
 The price tools are powered by PriceService, which aggregates data from the Stellar SDEX via trade aggregations. A PriceAggregator layer combines multiple oracle sources (currently SdexOracle + ReflectorOracle stub) and returns a median price along with a `sources[]` array containing `{name, price, timestamp}` entries for full attribution. Additional oracles (Chainlink, Redstone, Band) plug into the same OracleProvider interface.
 
+### Soroban Token Tools
+
+| Tool | Description | Price |
+|------|-------------|-------|
+| `getSorobanTokenInfo` | SEP-41 token metadata (symbol, name, decimals) and optional balance lookup | $0.002 |
+
+Requires `SOROBAN_RPC_URL` to be configured. Uses Soroban contract simulation (read-only, no fees).
+
 ## Asset Format
 
 | Type | Format | Example |

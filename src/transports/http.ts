@@ -9,6 +9,7 @@ import type { HorizonClient } from "../providers/horizon.js";
 import { PriceService } from "../providers/price.js";
 import { SdexOracle, ReflectorOracle } from "../providers/oracle.js";
 import { PriceAggregator } from "../providers/aggregator.js";
+import { SorobanClient } from "../providers/soroban.js";
 import { parseAsset } from "../utils/formatters.js";
 import { TOOL_PRICES, FREE_ROUTES } from "../x402/pricing.js";
 import { logger } from "../utils/logger.js";
@@ -23,6 +24,8 @@ function parseLimit(raw: unknown, defaultVal: number, max: number): number {
   if (isNaN(n) || n < 1) return defaultVal;
   return Math.min(n, max);
 }
+
+const CONTRACT_ID_REGEX = /^C[A-Z2-7]{55}$/;
 
 const RESOLUTION_MAP: Record<string, number> = {
   "1m": 60000,
@@ -558,6 +561,82 @@ export async function createHttpServer(
       if (!RESOLUTION_MAP[resolution]) { res.status(400).json({ error: "invalid resolution" }); return; }
       const limit = parseLimit(req.query.limit, 24, 200);
       const result = await priceService.getVWAP(baseAsset, counterAsset, resolution, limit);
+      res.json(result);
+    } catch (error) {
+      errJson(res, error);
+    }
+  });
+
+  // --- Soroban token tools ---
+
+  app.get("/tools/getSorobanTokenInfo", async (req: Request, res: Response) => {
+    try {
+      if (!config.sorobanRpcUrl) {
+        res.status(503).json({ error: "soroban_not_configured", message: "Soroban RPC URL not configured" });
+        return;
+      }
+
+      const contractId = req.query.contractId as string;
+      if (!contractId || !CONTRACT_ID_REGEX.test(contractId)) {
+        res.status(400).json({ error: "invalid contractId" });
+        return;
+      }
+
+      let accountId: string | undefined = undefined;
+      if (req.query.accountId) {
+        const candidate = validateAccountId(req.query.accountId);
+        if (!candidate) {
+          res.status(400).json({ error: "invalid accountId" });
+          return;
+        }
+        accountId = candidate;
+      }
+
+      const networkPassphrase =
+        config.stellarNetwork === "testnet"
+          ? "Test SDF Network ; September 2015"
+          : "Public Global Stellar Network ; September 2015";
+
+      const sorobanClient = new SorobanClient(config.sorobanRpcUrl, networkPassphrase);
+
+      const [symbolResult, nameResult, decimalsResult] = await Promise.allSettled([
+        sorobanClient.simulateContractCall(contractId, "symbol"),
+        sorobanClient.simulateContractCall(contractId, "name"),
+        sorobanClient.simulateContractCall(contractId, "decimals"),
+      ]);
+
+      const symbol = symbolResult.status === "fulfilled" ? String(symbolResult.value) : null;
+      const name = nameResult.status === "fulfilled" ? String(nameResult.value) : null;
+      const decimals =
+        decimalsResult.status === "fulfilled" ? Number(decimalsResult.value) : null;
+
+      if (symbol === null && name === null && decimals === null) {
+        res.status(404).json({ error: "not_a_token", message: "Contract did not respond to SEP-41 metadata methods" });
+        return;
+      }
+
+      const result: Record<string, unknown> = { contractId, symbol, name, decimals };
+
+      if (accountId) {
+        try {
+          const addressArg = await sorobanClient.encodeAddress(accountId);
+          const rawBalance = await sorobanClient.simulateContractCall(contractId, "balance", [addressArg]);
+          const balanceBig = typeof rawBalance === "bigint" ? rawBalance : BigInt(String(rawBalance));
+          result.accountId = accountId;
+          result.balance = balanceBig.toString();
+          if (decimals !== null && decimals >= 0) {
+            const scale = 10n ** BigInt(decimals);
+            const whole = balanceBig / scale;
+            const frac = balanceBig % scale;
+            const fracStr = frac.toString().padStart(decimals, "0").replace(/0+$/, "");
+            result.displayBalance = fracStr ? `${whole}.${fracStr}` : whole.toString();
+          }
+        } catch (balErr) {
+          result.accountId = accountId;
+          result.balanceError = balErr instanceof Error ? balErr.message.slice(0, 100) : String(balErr).slice(0, 100);
+        }
+      }
+
       res.json(result);
     } catch (error) {
       errJson(res, error);

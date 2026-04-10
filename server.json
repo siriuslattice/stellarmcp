@@ -75,6 +75,10 @@
     {
       "name": "getVWAP",
       "description": "Get volume-weighted average price for a Stellar asset pair"
+    },
+    {
+      "name": "getSorobanTokenInfo",
+      "description": "Get SEP-41 Soroban token metadata (symbol, name, decimals) and optional balance for a Stellar account"
     }
   ],
   "tags": ["stellar", "blockchain", "x402", "micropayments", "ai-agents", "defi", "dex", "prices", "vwap"]

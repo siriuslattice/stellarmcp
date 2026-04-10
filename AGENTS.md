@@ -60,6 +60,7 @@ Each tool exposed as a GET endpoint. Paid endpoints require x402 payment header.
 | GET /tools/getPrice | $0.002 | baseAsset, counterAsset |
 | GET /tools/getPriceHistory | $0.002 | baseAsset, counterAsset, resolution?, limit? |
 | GET /tools/getVWAP | $0.002 | baseAsset, counterAsset, resolution?, limit? |
+| GET /tools/getSorobanTokenInfo | $0.002 | contractId, accountId? |
 | GET /pricing | free | — |
 | GET /health | free | — |
 | POST /mcp | free | MCP-over-HTTP JSON-RPC (StreamableHTTPServerTransport) |

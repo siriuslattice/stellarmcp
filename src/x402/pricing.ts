@@ -14,6 +14,7 @@ export const TOOL_PRICES: Record<string, string> = {
   "/tools/getPrice": "$0.002",
   "/tools/getPriceHistory": "$0.002",
   "/tools/getVWAP": "$0.002",
+  "/tools/getSorobanTokenInfo": "$0.002",
 };
 
 export const FREE_ROUTES = new Set(["/tools/getNetworkStatus", "/health", "/skill.md", "/mcp"]);

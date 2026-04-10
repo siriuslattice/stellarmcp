@@ -26,6 +26,7 @@ stdio transport and x402-gated REST API. x402-monetized on Stellar.
 - GET /tools/getPrice ($0.002)
 - GET /tools/getPriceHistory ($0.002)
 - GET /tools/getVWAP ($0.002)
+- GET /tools/getSorobanTokenInfo ($0.002) — SEP-41 token metadata + optional balance
 - POST /mcp (free) — MCP-over-HTTP JSON-RPC endpoint (StreamableHTTPServerTransport)
 - GET /mcp (free) — SSE stream for server-initiated messages
 

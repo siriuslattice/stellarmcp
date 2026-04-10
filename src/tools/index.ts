@@ -14,6 +14,7 @@ import { registerOperationTools } from "./operations.js";
 import { registerLiquidityPoolTools } from "./liquidityPools.js";
 import { registerClaimableBalanceTools } from "./claimableBalances.js";
 import { registerPriceTools } from "./price.js";
+import { registerSorobanTokenTools } from "./sorobanTokens.js";
 
 export function registerAllTools(server: McpServer, horizon: HorizonClient, config: Config) {
   registerAccountTools(server, horizon, config);
@@ -29,4 +30,5 @@ export function registerAllTools(server: McpServer, horizon: HorizonClient, conf
   registerLiquidityPoolTools(server, horizon, config);
   registerClaimableBalanceTools(server, horizon, config);
   registerPriceTools(server, horizon, config);
+  registerSorobanTokenTools(server, horizon, config);
 }

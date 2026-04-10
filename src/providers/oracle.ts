@@ -1,5 +1,6 @@
 import { logger } from "../utils/logger.js";
 import type { PriceService } from "./price.js";
+import { SorobanClient } from "./soroban.js";
 
 export interface OracleProvider {
   name: string;
@@ -53,10 +54,10 @@ const REFLECTOR_ASSET_INDEX: Record<string, number> = {
  * ReflectorOracle queries price data from the Reflector on-chain oracle
  * (reflector.network) via Soroban contract simulation.
  *
- * Note: This uses @stellar/stellar-sdk via dynamic import for Soroban
- * contract interaction. The no-sdk rule in .claude/rules/no-sdk.md applies
- * to Horizon REST queries only — Soroban RPC requires the SDK for XDR
- * construction and contract invocation.
+ * Note: This uses @stellar/stellar-sdk (via the shared SorobanClient) for
+ * Soroban contract interaction. The no-sdk rule in .claude/rules/no-sdk.md
+ * applies to Horizon REST queries only — Soroban RPC requires the SDK for
+ * XDR construction and contract invocation.
  */
 export class ReflectorOracle implements OracleProvider {
   name = "reflector";
@@ -64,6 +65,7 @@ export class ReflectorOracle implements OracleProvider {
   private sorobanRpcUrl: string;
   private contractId: string | undefined;
   private networkPassphrase: string;
+  private client: SorobanClient;
 
   constructor(options?: {
     sorobanRpcUrl?: string;
@@ -75,6 +77,7 @@ export class ReflectorOracle implements OracleProvider {
     this.contractId = options?.contractId;
     this.networkPassphrase =
       options?.networkPassphrase ?? "Test SDF Network ; September 2015";
+    this.client = new SorobanClient(this.sorobanRpcUrl, this.networkPassphrase);
   }
 
   async isAvailable(): Promise<boolean> {
@@ -117,102 +120,50 @@ export class ReflectorOracle implements OracleProvider {
     baseIndex: number,
     _counterIndex: number,
   ): Promise<{ price: string; timestamp: string } | null> {
-    // Dynamic import: @stellar/stellar-sdk is a dev dependency but available at runtime
-    // for Soroban contract simulation (read-only, no signing required)
-    const sdk = await import("@stellar/stellar-sdk");
-    const {
-      Account,
-      Contract,
-      Networks,
-      TransactionBuilder,
-      Keypair,
-      nativeToScVal,
-      scValToNative,
-      rpc,
-    } = sdk;
+    try {
+      const assetArg = await this.client.encodeU32(baseIndex);
+      const parsed = await this.client.simulateContractCall(
+        this.contractId!,
+        "lastprice",
+        [assetArg],
+      );
 
-    const server = new rpc.Server(this.sorobanRpcUrl);
+      // Reflector returns either a struct { price: i128, timestamp: u64 } or a scalar
+      const REFLECTOR_SCALE = 10n ** 14n;
+      let price: string;
+      let timestamp: string;
 
-    // Use a throwaway source account for simulation (no signing needed)
-    const sourceKeypair = Keypair.random();
-    const sourcePublicKey = sourceKeypair.publicKey();
+      if (typeof parsed === "object" && parsed !== null) {
+        const obj = parsed as { price?: unknown; timestamp?: unknown };
+        const rawPrice =
+          typeof obj.price === "bigint"
+            ? obj.price
+            : BigInt(String(obj.price ?? 0));
+        const rawTimestamp =
+          typeof obj.timestamp === "bigint"
+            ? Number(obj.timestamp)
+            : Number(obj.timestamp ?? 0);
 
-    // Build a simulated account (simulation doesn't check balances)
-    const simulatedAccount = new Account(sourcePublicKey, "0");
+        const whole = rawPrice / REFLECTOR_SCALE;
+        const frac = rawPrice % REFLECTOR_SCALE;
+        const fracStr = frac.toString().padStart(14, "0").replace(/0+$/, "");
+        price = fracStr ? `${whole}.${fracStr}` : whole.toString();
+        timestamp = new Date(rawTimestamp * 1000).toISOString();
+      } else {
+        const rawPrice =
+          typeof parsed === "bigint" ? parsed : BigInt(String(parsed));
+        const whole = rawPrice / REFLECTOR_SCALE;
+        const frac = rawPrice % REFLECTOR_SCALE;
+        const fracStr = frac.toString().padStart(14, "0").replace(/0+$/, "");
+        price = fracStr ? `${whole}.${fracStr}` : whole.toString();
+        timestamp = new Date().toISOString();
+      }
 
-    const contract = new Contract(this.contractId!);
-
-    // Reflector's `lastprice` takes an asset enum (u32 index)
-    const assetArg = nativeToScVal(baseIndex, { type: "u32" });
-
-    const networkPassphrase =
-      this.networkPassphrase === "Test SDF Network ; September 2015"
-        ? Networks.TESTNET
-        : Networks.PUBLIC;
-
-    const tx = new TransactionBuilder(simulatedAccount, {
-      fee: "100",
-      networkPassphrase,
-    })
-      .addOperation(contract.call("lastprice", assetArg))
-      .setTimeout(30)
-      .build();
-
-    const simResult = await server.simulateTransaction(tx);
-
-    if (rpc.Api.isSimulationError(simResult)) {
-      logger.warn("Reflector simulation returned error", {
-        error: (simResult as { error?: string }).error,
-      });
+      return { price, timestamp };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      logger.warn("Reflector query failed", { error: msg });
       return null;
     }
-
-    if (!rpc.Api.isSimulationSuccess(simResult)) {
-      logger.warn("Reflector simulation did not succeed");
-      return null;
-    }
-
-    // Parse the result: Reflector returns a struct { price: i128, timestamp: u64 }
-    const resultVal = simResult.result?.retval;
-    if (!resultVal) {
-      return null;
-    }
-
-    const parsed = scValToNative(resultVal);
-
-    // Reflector prices are typically scaled by 10^14
-    const REFLECTOR_SCALE = 10n ** 14n;
-    let price: string;
-    let timestamp: string;
-
-    if (typeof parsed === "object" && parsed !== null) {
-      // Struct with price and timestamp fields
-      const rawPrice =
-        typeof parsed.price === "bigint"
-          ? parsed.price
-          : BigInt(String(parsed.price ?? 0));
-      const rawTimestamp =
-        typeof parsed.timestamp === "bigint"
-          ? Number(parsed.timestamp)
-          : Number(parsed.timestamp ?? 0);
-
-      // Convert scaled integer to decimal string
-      const whole = rawPrice / REFLECTOR_SCALE;
-      const frac = rawPrice % REFLECTOR_SCALE;
-      const fracStr = frac.toString().padStart(14, "0").replace(/0+$/, "");
-      price = fracStr ? `${whole}.${fracStr}` : whole.toString();
-      timestamp = new Date(rawTimestamp * 1000).toISOString();
-    } else {
-      // Fallback: scalar value (just the price)
-      const rawPrice =
-        typeof parsed === "bigint" ? parsed : BigInt(String(parsed));
-      const whole = rawPrice / REFLECTOR_SCALE;
-      const frac = rawPrice % REFLECTOR_SCALE;
-      const fracStr = frac.toString().padStart(14, "0").replace(/0+$/, "");
-      price = fracStr ? `${whole}.${fracStr}` : whole.toString();
-      timestamp = new Date().toISOString();
-    }
-
-    return { price, timestamp };
   }
 }

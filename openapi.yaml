@@ -601,6 +601,72 @@ paths:
         "402": { $ref: "#/components/responses/PaymentRequired" }
         "500": { $ref: "#/components/responses/ServerError" }
 
+  /tools/getSorobanTokenInfo:
+    get:
+      summary: Get SEP-41 Soroban token metadata
+      description: |
+        Returns symbol, name, decimals for a SEP-41 token contract via Soroban contract simulation.
+        Optionally returns balance for a specific account when accountId is provided.
+        Requires SOROBAN_RPC_URL to be configured server-side.
+      tags:
+        - assets
+      security:
+        - x402: []
+      x-x402-price: $0.002
+      parameters:
+        - name: contractId
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: '^C[A-Z2-7]{55}$'
+          description: Soroban contract address (C... format, 56 chars)
+          example: CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75
+        - name: accountId
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/StellarAddress'
+          description: Optional Stellar account address — if provided, also fetches balance
+      responses:
+        '200':
+          description: Token metadata (and balance if accountId provided)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  contractId:
+                    type: string
+                  symbol:
+                    type: string
+                    nullable: true
+                  name:
+                    type: string
+                    nullable: true
+                  decimals:
+                    type: integer
+                    nullable: true
+                  accountId:
+                    type: string
+                  balance:
+                    type: string
+                    description: Raw integer balance (i128 as string)
+                  displayBalance:
+                    type: string
+                    description: Decimal-scaled balance
+                  balanceError:
+                    type: string
+                    description: Error message if balance lookup failed
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '404':
+          description: Contract did not respond to SEP-41 metadata methods
+        '503':
+          description: Soroban RPC URL not configured
+
 components:
   securitySchemes:
     x402:
