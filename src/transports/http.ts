@@ -1,6 +1,9 @@
 import express, { type Express, type Request, type Response } from "express";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { randomUUID } from "node:crypto";
 import type { Config } from "../config.js";
 import type { HorizonClient } from "../providers/horizon.js";
 import { PriceService } from "../providers/price.js";
@@ -39,12 +42,54 @@ function errJson(res: Response, error: unknown) {
   res.status(500).json({ error: "Internal server error" });
 }
 
-export async function createHttpServer(config: Config, horizon: HorizonClient): Promise<Express> {
+export async function createHttpServer(
+  config: Config,
+  horizon: HorizonClient,
+  mcpServer: McpServer,
+): Promise<Express> {
   const app = express();
   app.use(cors({
     origin: process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(",") : "*",
   }));
   app.use(rateLimit({ windowMs: 60_000, max: 60, message: { error: "rate_limited" }, keyGenerator: (req) => req.ip || "unknown" }));
+
+  // Body parser for /mcp POST requests (must be registered before MCP routes)
+  app.use(express.json({ limit: "1mb" }));
+
+  // --- MCP-over-HTTP transport (mounted before x402 so it stays free) ---
+  const mcpTransport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: () => randomUUID(),
+  });
+  await mcpServer.connect(mcpTransport);
+
+  app.post("/mcp", async (req, res) => {
+    try {
+      await mcpTransport.handleRequest(req, res, req.body);
+    } catch (err) {
+      logger.error("MCP POST error", { error: err instanceof Error ? err.message : String(err) });
+      if (!res.headersSent) res.status(500).json({ error: "internal_error" });
+    }
+  });
+
+  app.get("/mcp", async (req, res) => {
+    try {
+      await mcpTransport.handleRequest(req, res);
+    } catch (err) {
+      logger.error("MCP GET error", { error: err instanceof Error ? err.message : String(err) });
+      if (!res.headersSent) res.status(500).json({ error: "internal_error" });
+    }
+  });
+
+  app.delete("/mcp", async (req, res) => {
+    try {
+      await mcpTransport.handleRequest(req, res);
+    } catch (err) {
+      logger.error("MCP DELETE error", { error: err instanceof Error ? err.message : String(err) });
+      if (!res.headersSent) res.status(500).json({ error: "internal_error" });
+    }
+  });
+
+  logger.info("MCP-over-HTTP transport mounted at /mcp");
 
   // x402 payment middleware (when facilitator is configured)
   // MUST be awaited before route registration so middleware runs first

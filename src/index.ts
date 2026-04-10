@@ -26,7 +26,7 @@ if (config.transport === "stdio") {
   logger.info("StellarMCP started (stdio)");
 } else {
   const { createHttpServer } = await import("./transports/http.js");
-  const app = await createHttpServer(config, horizon);
+  const app = await createHttpServer(config, horizon, server);
   app.listen(config.port, config.host, () => {
     logger.info(`StellarMCP started (HTTP) on ${config.host}:${config.port}`);
     logger.info(`x402 payee: ${config.stellarPayeeAddress?.slice(0, 8)}...${config.stellarPayeeAddress?.slice(-4)}`);

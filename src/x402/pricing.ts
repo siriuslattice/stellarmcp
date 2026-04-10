@@ -16,4 +16,4 @@ export const TOOL_PRICES: Record<string, string> = {
   "/tools/getVWAP": "$0.002",
 };
 
-export const FREE_ROUTES = new Set(["/tools/getNetworkStatus", "/health", "/skill.md"]);
+export const FREE_ROUTES = new Set(["/tools/getNetworkStatus", "/health", "/skill.md", "/mcp"]);
