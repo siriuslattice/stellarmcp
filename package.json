@@ -23,6 +23,8 @@
     "test:watch": "vitest",
     "demo": "tsx examples/agent-demo.ts",
     "demo:service": "tsx examples/mock-external-service.ts",
+    "demo:sma": "tsx examples/trading-strategy-sma.ts",
+    "demo:arb": "tsx examples/trading-strategy-arb.ts",
     "keygen": "tsx scripts/keygen.ts",
     "x402:client": "tsx scripts/x402-client.ts",
     "setup:usdc": "tsx scripts/setup-usdc.ts",
