@@ -1,85 +1,186 @@
 {
-  "name": "stellarmcp",
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.siriuslattice/stellarmcp",
+  "title": "StellarMCP",
+  "description": "MCP server giving AI agents access to Stellar blockchain data — 17 tools, multi-oracle prices (SDEX + Reflector), MCP-over-HTTP support, x402 micropayments settled on Stellar",
   "version": "0.2.0",
-  "description": "MCP server giving AI agents access to Stellar blockchain data — 16 tools, multi-oracle prices (SDEX + Reflector), MCP-over-HTTP support, x402 micropayments settled on Stellar",
   "homepage": "https://github.com/siriuslattice/stellarmcp",
   "repository": {
     "type": "git",
-    "url": "https://github.com/siriuslattice/stellarmcp.git"
+    "url": "https://github.com/siriuslattice/stellarmcp.git",
+    "source": "github"
   },
   "license": "MIT",
-  "runtime": "node",
-  "command": "npx stellar-mcp-x402",
-  "transport": ["stdio", "http"],
-  "tools": [
+  "packages": [
     {
-      "name": "getAccount",
-      "description": "Get Stellar account details including balances, thresholds, and signers"
-    },
-    {
-      "name": "getTransactions",
-      "description": "Get recent transactions for a Stellar account"
-    },
-    {
-      "name": "getPayments",
-      "description": "Get recent payments for a Stellar account"
-    },
-    {
-      "name": "getOrderbook",
-      "description": "Get Stellar DEX orderbook for an asset pair with spread and midprice"
-    },
-    {
-      "name": "getTradeAggregations",
-      "description": "Get OHLC trade aggregation data for a Stellar DEX asset pair"
-    },
-    {
-      "name": "getAssetInfo",
-      "description": "Get metadata for a Stellar asset including supply, accounts, and flags"
-    },
-    {
-      "name": "getNetworkStatus",
-      "description": "Get Stellar network status (free)"
-    },
-    {
-      "name": "getLedger",
-      "description": "Get details of a specific Stellar ledger by sequence number"
-    },
-    {
-      "name": "getEffects",
-      "description": "Get effects (balance changes, trades, trustlines) for a Stellar account"
-    },
-    {
-      "name": "getOffers",
-      "description": "Get open DEX offers for a Stellar account"
-    },
-    {
-      "name": "getOperations",
-      "description": "Get all operations for a Stellar account"
-    },
-    {
-      "name": "getLiquidityPools",
-      "description": "Get Stellar AMM liquidity pools, optionally filtered by account"
-    },
-    {
-      "name": "getClaimableBalances",
-      "description": "Get claimable balances filtered by claimant or asset"
-    },
-    {
-      "name": "getPrice",
-      "description": "Get current normalized price for any Stellar asset pair with multi-oracle aggregation (median + per-source attribution from SDEX and Reflector)"
-    },
-    {
-      "name": "getPriceHistory",
-      "description": "Get OHLC price history with VWAP for a Stellar asset pair"
-    },
-    {
-      "name": "getVWAP",
-      "description": "Get volume-weighted average price for a Stellar asset pair"
-    },
-    {
-      "name": "getSorobanTokenInfo",
-      "description": "Get SEP-41 Soroban token metadata (symbol, name, decimals) and optional balance for a Stellar account"
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "stellar-mcp-x402",
+      "version": "0.2.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "runtimeHint": "npx",
+      "runtimeArguments": [
+        {
+          "type": "positional",
+          "value": "stellar-mcp-x402"
+        }
+      ],
+      "environmentVariables": [
+        {
+          "name": "STELLAR_NETWORK",
+          "description": "Stellar network to query",
+          "default": "testnet",
+          "isRequired": false,
+          "choices": ["testnet", "pubnet"]
+        },
+        {
+          "name": "HORIZON_URL",
+          "description": "Stellar Horizon REST API base URL",
+          "default": "https://horizon-testnet.stellar.org",
+          "isRequired": false
+        },
+        {
+          "name": "TRANSPORT",
+          "description": "Transport mode: stdio for MCP clients, http for x402-gated REST, mcp-http for remote MCP over HTTP",
+          "default": "stdio",
+          "isRequired": false,
+          "choices": ["stdio", "http", "mcp-http"]
+        },
+        {
+          "name": "STELLAR_PAYEE_ADDRESS",
+          "description": "Stellar address that receives x402 payments (HTTP mode only)",
+          "isRequired": false
+        },
+        {
+          "name": "OZ_FACILITATOR_URL",
+          "description": "OpenZeppelin x402 facilitator URL (HTTP mode only)",
+          "default": "https://channels.openzeppelin.com/x402/testnet",
+          "isRequired": false
+        },
+        {
+          "name": "OZ_API_KEY",
+          "description": "OpenZeppelin facilitator API key (HTTP mode only)",
+          "isRequired": false,
+          "isSecret": true
+        }
+      ]
     }
   ],
-  "tags": ["stellar", "blockchain", "x402", "micropayments", "ai-agents", "defi", "dex", "prices", "vwap"]
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "http://localhost:4021/mcp",
+      "description": "Local MCP-over-HTTP transport (run with TRANSPORT=mcp-http)"
+    }
+  ],
+  "_meta": {
+    "io.github.siriuslattice/stellarmcp": {
+      "runtime": "node",
+      "command": "npx stellar-mcp-x402",
+      "transports": ["stdio", "http", "mcp-http"],
+      "tags": [
+        "stellar",
+        "blockchain",
+        "x402",
+        "micropayments",
+        "ai-agents",
+        "defi",
+        "dex",
+        "prices",
+        "vwap",
+        "oracle",
+        "reflector",
+        "soroban"
+      ],
+      "tools": [
+        {
+          "name": "getAccount",
+          "description": "Get Stellar account details including balances, thresholds, and signers",
+          "price": "$0.001"
+        },
+        {
+          "name": "getTransactions",
+          "description": "Get recent transactions for a Stellar account",
+          "price": "$0.001"
+        },
+        {
+          "name": "getPayments",
+          "description": "Get recent payments for a Stellar account",
+          "price": "$0.001"
+        },
+        {
+          "name": "getOrderbook",
+          "description": "Get Stellar DEX orderbook for an asset pair with spread and midprice",
+          "price": "$0.002"
+        },
+        {
+          "name": "getTradeAggregations",
+          "description": "Get OHLC trade aggregation data for a Stellar DEX asset pair",
+          "price": "$0.002"
+        },
+        {
+          "name": "getAssetInfo",
+          "description": "Get metadata for a Stellar asset including supply, accounts, and flags",
+          "price": "$0.001"
+        },
+        {
+          "name": "getNetworkStatus",
+          "description": "Get Stellar network status",
+          "price": "free"
+        },
+        {
+          "name": "getLedger",
+          "description": "Get details of a specific Stellar ledger by sequence number",
+          "price": "$0.001"
+        },
+        {
+          "name": "getEffects",
+          "description": "Get effects (balance changes, trades, trustlines) for a Stellar account",
+          "price": "$0.001"
+        },
+        {
+          "name": "getOffers",
+          "description": "Get open DEX offers for a Stellar account",
+          "price": "$0.001"
+        },
+        {
+          "name": "getOperations",
+          "description": "Get all operations for a Stellar account",
+          "price": "$0.001"
+        },
+        {
+          "name": "getLiquidityPools",
+          "description": "Get Stellar AMM liquidity pools, optionally filtered by account",
+          "price": "$0.002"
+        },
+        {
+          "name": "getClaimableBalances",
+          "description": "Get claimable balances filtered by claimant or asset",
+          "price": "$0.001"
+        },
+        {
+          "name": "getPrice",
+          "description": "Get current normalized price for any Stellar asset pair with multi-oracle aggregation (median + per-source attribution from SDEX and Reflector)",
+          "price": "$0.002"
+        },
+        {
+          "name": "getPriceHistory",
+          "description": "Get OHLC price history with VWAP for a Stellar asset pair",
+          "price": "$0.002"
+        },
+        {
+          "name": "getVWAP",
+          "description": "Get volume-weighted average price for a Stellar asset pair",
+          "price": "$0.002"
+        },
+        {
+          "name": "getSorobanTokenInfo",
+          "description": "Get SEP-41 Soroban token metadata (symbol, name, decimals) and optional balance for a Stellar account",
+          "price": "$0.001"
+        }
+      ]
+    }
+  }
 }
