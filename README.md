@@ -8,15 +8,16 @@ Built for the [Stellar Hacks: Agents](https://dorahacks.io/hackathon/stellar-hac
 
 ## Features
 
-- **16 MCP tools** querying the Stellar Horizon REST API
-- **PriceService** with VWAP, OHLC history, and oracle abstraction layer
+- **17 MCP tools** querying Stellar Horizon REST + Soroban contracts (SEP-41 tokens)
 - **Multi-oracle price aggregation** with median computation and source attribution across SDEX and Reflector
+- **PriceService** with VWAP, OHLC history, and oracle abstraction layer
 - **x402 micropayments** on Stellar — agents pay per call in USDC
-- **Triple transport** — stdio for local MCP clients, HTTP REST for x402-gated access, MCP-over-HTTP at `/mcp` for remote MCP clients
-- **MCP-over-HTTP transport at `/mcp`** for remote MCP clients (StreamableHTTPServerTransport with stateful sessions)
-- **Earn/spend demo** — agent earns USDC selling data, spends USDC on external services
-- **OpenClaw registered** — permissionless agent discovery via `GET /skill.md`
-- **Zero dependencies on `@stellar/stellar-sdk`** — raw `fetch` to Horizon
+- **Triple transport** — stdio for local MCP clients, HTTP REST for x402-gated access, MCP-over-HTTP at `/mcp` (StreamableHTTPServerTransport with stateful sessions) for remote MCP clients
+- **132 tests** — 106 unit + 26 live testnet integration
+- **Production-ready** — multi-stage Dockerfile, mainnet auto-defaults, enriched `/health`, self-service `/docs` page with embedded Swagger UI
+- **Earn/spend demo + trading strategies** — SMA crossover, cross-pair arbitrage, real x402 settlement loop
+- **OpenClaw compatible** — permissionless agent discovery via `GET /skill.md`
+- **Zero `@stellar/stellar-sdk` in production bundle** — raw `fetch` to Horizon, dynamic import only for Soroban contract simulation
 
 ## Quick Start
 
@@ -44,7 +45,7 @@ Or add to your MCP client config:
 
 ### MCP Client (HTTP — remote)
 
-Connect to a running StellarMCP HTTP server from any MCP client that supports the StreamableHTTP transport. Point your client at `http://<host>:4021/mcp` — the same McpServer instance with all 16 tools is shared between the stdio and HTTP transports.
+Connect to a running StellarMCP HTTP server from any MCP client that supports the StreamableHTTP transport. Point your client at `http://<host>:4021/mcp` — the same McpServer instance with all 17 tools is shared between the stdio and HTTP transports.
 
 ```bash
 # Start the HTTP server (also serves /mcp)
@@ -160,7 +161,7 @@ pnpm inspect      # Open MCP Inspector at localhost:6274
 ## Architecture
 
 ```
-stdio transport ──> McpServer ──> 16 tools ──> HorizonClient ──> Stellar Horizon REST API
+stdio transport ──> McpServer ──> 17 tools ──> HorizonClient ──> Stellar Horizon REST API
                         │                          │
                         │                          ├── PriceService
 HTTP transport  ──> Express ──┬── /tools/* (REST + x402)
@@ -170,7 +171,7 @@ HTTP transport  ──> Express ──┬── /tools/* (REST + x402)
                         └── PriceAggregator → [SdexOracle, ReflectorOracle]
 ```
 
-Both the stdio and HTTP transports share the **same McpServer instance** with all 16 tools registered. The `/mcp` endpoint is a MCP-over-HTTP bridge (POST/GET/DELETE) using `StreamableHTTPServerTransport` with stateful sessions tracked via the `mcp-session-id` header — giving remote MCP clients the full protocol (tools, resources, prompts) without stdio.
+Both the stdio and HTTP transports share the **same McpServer instance** with all 17 tools registered. The `/mcp` endpoint is a MCP-over-HTTP bridge (POST/GET/DELETE) using `StreamableHTTPServerTransport` with stateful sessions tracked via the `mcp-session-id` header — giving remote MCP clients the full protocol (tools, resources, prompts) without stdio.
 
 The PriceService sits on top of HorizonClient and provides normalized price data (current price, OHLC history, VWAP). The PriceAggregator layer fans out queries to multiple OracleProviders (SdexOracle + ReflectorOracle today) and computes a median with per-source attribution. Additional oracles (Chainlink, Redstone) plug in via the same interface.
 
@@ -200,6 +201,16 @@ See [.env.example](.env.example) for all options.
 | `LOG_LEVEL` | No | `info` | `debug`, `info`, `warn`, `error` |
 | `SOROBAN_RPC_URL` | No | — | Soroban RPC URL (used by ReflectorOracle and future SEP-41 support) |
 | `REFLECTOR_CONTRACT_ID` | No | — | Reflector oracle contract ID on Stellar (enables ReflectorOracle in PriceAggregator) |
+
+## Documentation
+
+- [Architecture](docs/ARCHITECTURE.md) — component map, data flow, key design decisions (8 Mermaid diagrams)
+- [Metrics](docs/METRICS.md) — verifiable current state evidence (every metric reproducible from this repo)
+- [Deployment](docs/DEPLOYMENT.md) — production deployment guide (Docker, PM2, systemd, nginx, Caddy, monitoring, security)
+- [MCP Registry submission](docs/MCP_REGISTRY.md) — guide for publishing to the official MCP Registry
+- [x402 Bazaar registration](docs/X402_BAZAAR.md) — guide for registering on the Coinbase CDP x402 Bazaar
+- [OpenAPI spec](openapi.yaml) — full OpenAPI 3.1 spec for all 22 endpoints
+- Live `/docs` page — when the HTTP server is running, visit `http://localhost:4021/docs` for an embedded Swagger UI
 
 ## License
 
