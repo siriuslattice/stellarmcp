@@ -8,7 +8,8 @@ Built for the [Stellar Hacks: Agents](https://dorahacks.io/hackathon/stellar-hac
 
 ## Features
 
-- **8 MCP tools** querying the Stellar Horizon REST API
+- **16 MCP tools** querying the Stellar Horizon REST API
+- **PriceService** with VWAP, OHLC history, and oracle abstraction layer
 - **x402 micropayments** on Stellar — agents pay per call in USDC
 - **Dual transport** — stdio for MCP clients, HTTP REST for x402-gated access
 - **Earn/spend demo** — agent earns USDC selling data, spends USDC on external services
@@ -64,6 +65,8 @@ curl http://localhost:4021/pricing
 
 ## Tools
 
+### Horizon Data Tools
+
 | Tool | Description | Price |
 |------|-------------|-------|
 | `getAccount` | Account balances, thresholds, signers | $0.001 |
@@ -74,6 +77,21 @@ curl http://localhost:4021/pricing
 | `getAssetInfo` | Asset metadata, supply, flags | $0.001 |
 | `getNetworkStatus` | Network health and protocol version | **Free** |
 | `getLedger` | Ledger details by sequence number | $0.001 |
+| `getEffects` | Account effects (balance changes, trades, etc.) | $0.001 |
+| `getOffers` | Open DEX offers for an account | $0.001 |
+| `getOperations` | All operations for an account | $0.001 |
+| `getLiquidityPools` | Stellar AMM liquidity pools | $0.002 |
+| `getClaimableBalances` | Claimable balances by claimant or asset | $0.001 |
+
+### Price Tools
+
+| Tool | Description | Price |
+|------|-------------|-------|
+| `getPrice` | Current price for any Stellar asset pair | $0.002 |
+| `getPriceHistory` | OHLC price history with VWAP | $0.002 |
+| `getVWAP` | Volume-weighted average price | $0.002 |
+
+The price tools are powered by PriceService, which aggregates data from the Stellar SDEX via trade aggregations. The oracle abstraction layer supports multiple price sources (SDEX, Reflector) with source attribution.
 
 ## Asset Format
 
@@ -114,16 +132,20 @@ pnpm inspect      # Open MCP Inspector at localhost:6274
 ## Architecture
 
 ```
-stdio transport ──► McpServer ──► 8 tools ──► HorizonClient ──► Stellar Horizon REST API
-                                                    │
-HTTP transport  ──► Express ──► x402 middleware ─────┘
-                       │
-                       ├── /tools/* (paid endpoints)
-                       ├── /tools/getNetworkStatus (free)
-                       ├── /health (free)
-                       ├── /pricing (free)
-                       └── /skill.md (OpenClaw discovery)
+                                                   +--> PriceService ──> OracleProvider(s)
+                                                   |
+stdio transport ──> McpServer ──> 16 tools ──> HorizonClient ──> Stellar Horizon REST API
+                                                   |
+HTTP transport  ──> Express ──> x402 middleware ────+
+                       |
+                       +-- /tools/* (paid endpoints)
+                       +-- /tools/getNetworkStatus (free)
+                       +-- /health (free)
+                       +-- /pricing (free)
+                       +-- /skill.md (OpenClaw discovery)
 ```
+
+The PriceService sits on top of HorizonClient and provides normalized price data (current price, OHLC history, VWAP) through an oracle abstraction layer. The SDEX oracle queries Horizon trade aggregations; future oracles (Reflector, Chainlink) plug in via the same OracleProvider interface.
 
 ## Tech Stack
 
@@ -149,6 +171,7 @@ See [.env.example](.env.example) for all options.
 | `OZ_API_KEY` | HTTP mode | — | OpenZeppelin facilitator API key |
 | `PORT` | No | `4021` | HTTP server port |
 | `LOG_LEVEL` | No | `info` | `debug`, `info`, `warn`, `error` |
+| `SOROBAN_RPC_URL` | No | — | Soroban RPC URL (for future SEP-41 token support) |
 
 ## License
 

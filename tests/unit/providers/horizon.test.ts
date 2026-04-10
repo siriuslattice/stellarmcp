@@ -63,4 +63,98 @@ describe("HorizonClient", () => {
     expect(result).toEqual(mockData);
     expect(globalThis.fetch).toHaveBeenCalledTimes(2);
   });
+
+  it("should call /accounts/{id}/effects for getEffects", async () => {
+    client = new HorizonClient(mockConfig);
+    const mockPage = { _embedded: { records: [] }, _links: { self: { href: "" } } };
+
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify(mockPage), { status: 200 }),
+    );
+
+    const result = await client.getEffects("GABC", 5, "asc");
+    expect(result).toEqual(mockPage);
+    const calledUrl = new URL(fetchSpy.mock.calls[0][0] as string);
+    expect(calledUrl.pathname).toBe("/accounts/GABC/effects");
+    expect(calledUrl.searchParams.get("limit")).toBe("5");
+    expect(calledUrl.searchParams.get("order")).toBe("asc");
+  });
+
+  it("should call /accounts/{id}/offers for getOffers", async () => {
+    client = new HorizonClient(mockConfig);
+    const mockPage = { _embedded: { records: [] }, _links: { self: { href: "" } } };
+
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify(mockPage), { status: 200 }),
+    );
+
+    const result = await client.getOffers("GXYZ", 20, "desc");
+    expect(result).toEqual(mockPage);
+    const calledUrl = new URL(fetchSpy.mock.calls[0][0] as string);
+    expect(calledUrl.pathname).toBe("/accounts/GXYZ/offers");
+    expect(calledUrl.searchParams.get("limit")).toBe("20");
+    expect(calledUrl.searchParams.get("order")).toBe("desc");
+  });
+
+  it("should call /accounts/{id}/operations for getOperations", async () => {
+    client = new HorizonClient(mockConfig);
+    const mockPage = { _embedded: { records: [] }, _links: { self: { href: "" } } };
+
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify(mockPage), { status: 200 }),
+    );
+
+    const result = await client.getOperations("GABC", 15, "asc");
+    expect(result).toEqual(mockPage);
+    const calledUrl = new URL(fetchSpy.mock.calls[0][0] as string);
+    expect(calledUrl.pathname).toBe("/accounts/GABC/operations");
+    expect(calledUrl.searchParams.get("limit")).toBe("15");
+    expect(calledUrl.searchParams.get("order")).toBe("asc");
+  });
+
+  it("should call /liquidity_pools for getLiquidityPools", async () => {
+    client = new HorizonClient(mockConfig);
+    const mockPage = { _embedded: { records: [] }, _links: { self: { href: "" } } };
+
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify(mockPage), { status: 200 }),
+    );
+
+    const result = await client.getLiquidityPools({ reserves: "native", limit: "10" });
+    expect(result).toEqual(mockPage);
+    const calledUrl = new URL(fetchSpy.mock.calls[0][0] as string);
+    expect(calledUrl.pathname).toBe("/liquidity_pools");
+    expect(calledUrl.searchParams.get("reserves")).toBe("native");
+    expect(calledUrl.searchParams.get("limit")).toBe("10");
+  });
+
+  it("should call /claimable_balances for getClaimableBalances", async () => {
+    client = new HorizonClient(mockConfig);
+    const mockPage = { _embedded: { records: [] }, _links: { self: { href: "" } } };
+
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify(mockPage), { status: 200 }),
+    );
+
+    const result = await client.getClaimableBalances({ claimant: "GABC", limit: "5" });
+    expect(result).toEqual(mockPage);
+    const calledUrl = new URL(fetchSpy.mock.calls[0][0] as string);
+    expect(calledUrl.pathname).toBe("/claimable_balances");
+    expect(calledUrl.searchParams.get("claimant")).toBe("GABC");
+    expect(calledUrl.searchParams.get("limit")).toBe("5");
+  });
+
+  it("should cache getEffects results", async () => {
+    client = new HorizonClient(mockConfig);
+    const mockPage = { _embedded: { records: [{ id: "1" }] }, _links: { self: { href: "" } } };
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify(mockPage), { status: 200 }),
+    );
+
+    await client.getEffects("GABC");
+    const result2 = await client.getEffects("GABC");
+    expect(result2).toEqual(mockPage);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
 });

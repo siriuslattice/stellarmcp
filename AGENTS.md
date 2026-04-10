@@ -3,18 +3,18 @@
 ## Agent Identity
 - **Name**: StellarMCP
 - **Type**: Data Merchant
-- **Version**: 0.1.0
+- **Version**: 0.2.0
 - **Description**: Sells Stellar blockchain data to AI agents via x402 micropayments
 
 ## Capabilities
-- **Reads**: Stellar accounts, transactions, payments, DEX orderbooks, trade aggregations, asset metadata, network status, ledger details
+- **Reads**: Stellar accounts, transactions, payments, DEX orderbooks, trade aggregations, asset metadata, network status, ledger details, effects, offers, operations, liquidity pools, claimable balances, normalized prices, VWAP
 - **Writes**: None (read-only)
 - **Settlement**: x402 on Stellar (USDC)
 
 ## Interfaces
 
 ### MCP (stdio)
-Full Model Context Protocol server with 8 tools. Connect via any MCP client.
+Full Model Context Protocol server with 16 tools. Connect via any MCP client.
 
 ```json
 {
@@ -43,6 +43,14 @@ Each tool exposed as a GET endpoint. Paid endpoints require x402 payment header.
 | GET /tools/getAssetInfo | $0.001 | assetCode, assetIssuer? |
 | GET /tools/getNetworkStatus | free | — |
 | GET /tools/getLedger | $0.001 | sequence? |
+| GET /tools/getEffects | $0.001 | accountId, limit? |
+| GET /tools/getOffers | $0.001 | accountId, limit? |
+| GET /tools/getOperations | $0.001 | accountId, limit? |
+| GET /tools/getLiquidityPools | $0.002 | account?, limit? |
+| GET /tools/getClaimableBalances | $0.001 | claimant?, asset?, limit? |
+| GET /tools/getPrice | $0.002 | baseAsset, counterAsset |
+| GET /tools/getPriceHistory | $0.002 | baseAsset, counterAsset, resolution?, limit? |
+| GET /tools/getVWAP | $0.002 | baseAsset, counterAsset, resolution?, limit? |
 | GET /pricing | free | — |
 | GET /health | free | — |
 

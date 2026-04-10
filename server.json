@@ -1,7 +1,7 @@
 {
   "name": "stellarmcp",
-  "version": "0.1.0",
-  "description": "MCP server giving AI agents access to Stellar blockchain data — accounts, DEX, transactions, assets — with x402 micropayments settled on Stellar",
+  "version": "0.2.0",
+  "description": "MCP server giving AI agents access to Stellar blockchain data — accounts, DEX, transactions, assets, prices — with x402 micropayments settled on Stellar",
   "homepage": "https://github.com/siriuslattice/stellarmcp",
   "repository": {
     "type": "git",
@@ -43,7 +43,39 @@
     {
       "name": "getLedger",
       "description": "Get details of a specific Stellar ledger by sequence number"
+    },
+    {
+      "name": "getEffects",
+      "description": "Get effects (balance changes, trades, trustlines) for a Stellar account"
+    },
+    {
+      "name": "getOffers",
+      "description": "Get open DEX offers for a Stellar account"
+    },
+    {
+      "name": "getOperations",
+      "description": "Get all operations for a Stellar account"
+    },
+    {
+      "name": "getLiquidityPools",
+      "description": "Get Stellar AMM liquidity pools, optionally filtered by account"
+    },
+    {
+      "name": "getClaimableBalances",
+      "description": "Get claimable balances filtered by claimant or asset"
+    },
+    {
+      "name": "getPrice",
+      "description": "Get current normalized price for any Stellar asset pair"
+    },
+    {
+      "name": "getPriceHistory",
+      "description": "Get OHLC price history with VWAP for a Stellar asset pair"
+    },
+    {
+      "name": "getVWAP",
+      "description": "Get volume-weighted average price for a Stellar asset pair"
     }
   ],
-  "tags": ["stellar", "blockchain", "x402", "micropayments", "ai-agents", "defi", "dex"]
+  "tags": ["stellar", "blockchain", "x402", "micropayments", "ai-agents", "defi", "dex", "prices", "vwap"]
 }

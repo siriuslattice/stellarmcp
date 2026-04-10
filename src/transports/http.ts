@@ -3,6 +3,7 @@ import cors from "cors";
 import rateLimit from "express-rate-limit";
 import type { Config } from "../config.js";
 import type { HorizonClient } from "../providers/horizon.js";
+import { PriceService } from "../providers/price.js";
 import { parseAsset } from "../utils/formatters.js";
 import { TOOL_PRICES, FREE_ROUTES } from "../x402/pricing.js";
 import { logger } from "../utils/logger.js";
@@ -302,6 +303,209 @@ export async function createHttpServer(config: Config, horizon: HorizonClient): 
         totalCoins: data.total_coins,
         protocolVersion: data.protocol_version,
       });
+    } catch (error) {
+      errJson(res, error);
+    }
+  });
+
+  // --- New Horizon tools ---
+
+  app.get("/tools/getEffects", async (req: Request, res: Response) => {
+    try {
+      const accountId = validateAccountId(req.query.accountId);
+      if (!accountId) { res.status(400).json({ error: "invalid accountId" }); return; }
+      const limit = parseLimit(req.query.limit, 10, 50);
+      const data = await horizon.getEffects(accountId, limit);
+      res.json(
+        data._embedded.records.map((e) => ({
+          id: e.id,
+          type: e.type,
+          account: e.account,
+          createdAt: e.created_at,
+        })),
+      );
+    } catch (error) {
+      errJson(res, error);
+    }
+  });
+
+  app.get("/tools/getOffers", async (req: Request, res: Response) => {
+    try {
+      const accountId = validateAccountId(req.query.accountId);
+      if (!accountId) { res.status(400).json({ error: "invalid accountId" }); return; }
+      const limit = parseLimit(req.query.limit, 10, 50);
+      const data = await horizon.getOffers(accountId, limit);
+      res.json(
+        data._embedded.records.map((o) => ({
+          id: o.id,
+          seller: o.seller,
+          selling:
+            o.selling.asset_type === "native"
+              ? "XLM"
+              : `${o.selling.asset_code}:${o.selling.asset_issuer}`,
+          buying:
+            o.buying.asset_type === "native"
+              ? "XLM"
+              : `${o.buying.asset_code}:${o.buying.asset_issuer}`,
+          amount: o.amount,
+          price: o.price,
+          lastModifiedLedger: o.last_modified_ledger,
+        })),
+      );
+    } catch (error) {
+      errJson(res, error);
+    }
+  });
+
+  app.get("/tools/getOperations", async (req: Request, res: Response) => {
+    try {
+      const accountId = validateAccountId(req.query.accountId);
+      if (!accountId) { res.status(400).json({ error: "invalid accountId" }); return; }
+      const limit = parseLimit(req.query.limit, 10, 50);
+      const data = await horizon.getOperations(accountId, limit);
+      res.json(
+        data._embedded.records.map((op) => ({
+          id: op.id,
+          type: op.type,
+          sourceAccount: op.source_account,
+          createdAt: op.created_at,
+          transactionHash: op.transaction_hash,
+          ...(op.from ? { from: op.from } : {}),
+          ...(op.to ? { to: op.to } : {}),
+          ...(op.amount ? { amount: op.amount } : {}),
+          ...(op.asset_type
+            ? {
+                asset:
+                  op.asset_type === "native"
+                    ? "XLM"
+                    : op.asset_code && op.asset_issuer
+                      ? `${op.asset_code}:${op.asset_issuer}`
+                      : null,
+              }
+            : {}),
+        })),
+      );
+    } catch (error) {
+      errJson(res, error);
+    }
+  });
+
+  app.get("/tools/getLiquidityPools", async (req: Request, res: Response) => {
+    try {
+      const limit = parseLimit(req.query.limit, 10, 50);
+      const params: Record<string, string> = { limit: String(limit) };
+      const account = req.query.account as string | undefined;
+      if (account) {
+        const validAccount = validateAccountId(account);
+        if (!validAccount) { res.status(400).json({ error: "invalid account" }); return; }
+        params.account = validAccount;
+      }
+      const data = await horizon.getLiquidityPools(params);
+      res.json(
+        data._embedded.records.map((p) => ({
+          id: p.id,
+          fee: p.fee_bp,
+          totalTrustlines: p.total_trustlines,
+          totalShares: p.total_shares,
+          reserves: p.reserves,
+        })),
+      );
+    } catch (error) {
+      errJson(res, error);
+    }
+  });
+
+  app.get("/tools/getClaimableBalances", async (req: Request, res: Response) => {
+    try {
+      const limit = parseLimit(req.query.limit, 10, 50);
+      const params: Record<string, string> = { limit: String(limit) };
+      const claimant = req.query.claimant as string | undefined;
+      if (claimant) {
+        const validClaimant = validateAccountId(claimant);
+        if (!validClaimant) { res.status(400).json({ error: "invalid claimant" }); return; }
+        params.claimant = validClaimant;
+      }
+      const asset = req.query.asset as string | undefined;
+      if (asset) {
+        const parsed = parseAsset(asset);
+        if (parsed.isNative) {
+          params.asset = "native";
+        } else {
+          params.asset = `${parsed.code}:${parsed.issuer}`;
+        }
+      }
+      const data = await horizon.getClaimableBalances(params);
+      res.json(
+        data._embedded.records.map((cb) => ({
+          id: cb.id,
+          amount: cb.amount,
+          asset: cb.asset,
+          sponsor: cb.sponsor,
+          claimants: cb.claimants,
+          lastModifiedLedger: cb.last_modified_ledger,
+        })),
+      );
+    } catch (error) {
+      errJson(res, error);
+    }
+  });
+
+  // --- Price tools ---
+
+  const priceService = new PriceService(horizon);
+
+  app.get("/tools/getPrice", async (req: Request, res: Response) => {
+    try {
+      const baseAsset = req.query.baseAsset as string;
+      const counterAsset = req.query.counterAsset as string;
+      if (!baseAsset || !counterAsset) {
+        res.status(400).json({ error: "missing baseAsset or counterAsset" });
+        return;
+      }
+      parseAsset(baseAsset);
+      parseAsset(counterAsset);
+      const result = await priceService.getPrice(baseAsset, counterAsset);
+      res.json(result);
+    } catch (error) {
+      errJson(res, error);
+    }
+  });
+
+  app.get("/tools/getPriceHistory", async (req: Request, res: Response) => {
+    try {
+      const baseAsset = req.query.baseAsset as string;
+      const counterAsset = req.query.counterAsset as string;
+      if (!baseAsset || !counterAsset) {
+        res.status(400).json({ error: "missing baseAsset or counterAsset" });
+        return;
+      }
+      parseAsset(baseAsset);
+      parseAsset(counterAsset);
+      const resolution = (req.query.resolution as string) || "1h";
+      if (!RESOLUTION_MAP[resolution]) { res.status(400).json({ error: "invalid resolution" }); return; }
+      const limit = parseLimit(req.query.limit, 24, 200);
+      const result = await priceService.getPriceHistory(baseAsset, counterAsset, resolution, limit);
+      res.json(result);
+    } catch (error) {
+      errJson(res, error);
+    }
+  });
+
+  app.get("/tools/getVWAP", async (req: Request, res: Response) => {
+    try {
+      const baseAsset = req.query.baseAsset as string;
+      const counterAsset = req.query.counterAsset as string;
+      if (!baseAsset || !counterAsset) {
+        res.status(400).json({ error: "missing baseAsset or counterAsset" });
+        return;
+      }
+      parseAsset(baseAsset);
+      parseAsset(counterAsset);
+      const resolution = (req.query.resolution as string) || "1h";
+      if (!RESOLUTION_MAP[resolution]) { res.status(400).json({ error: "invalid resolution" }); return; }
+      const limit = parseLimit(req.query.limit, 24, 200);
+      const result = await priceService.getVWAP(baseAsset, counterAsset, resolution, limit);
+      res.json(result);
     } catch (error) {
       errJson(res, error);
     }

@@ -121,3 +121,70 @@ export interface HorizonLedger {
   total_coins: string;
   protocol_version: number;
 }
+
+export interface HorizonAssetRef {
+  asset_type: "native" | "credit_alphanum4" | "credit_alphanum12";
+  asset_code?: string;
+  asset_issuer?: string;
+}
+
+export interface HorizonEffect {
+  id: string;
+  paging_token: string;
+  account: string;
+  type: string;
+  type_i: number;
+  created_at: string;
+}
+
+export interface HorizonOffer {
+  id: string;
+  paging_token: string;
+  seller: string;
+  selling: HorizonAssetRef;
+  buying: HorizonAssetRef;
+  amount: string;
+  price: string;
+  price_r: { n: number; d: number };
+  last_modified_ledger: number;
+  last_modified_time: string;
+}
+
+export interface HorizonLiquidityPool {
+  id: string;
+  paging_token: string;
+  fee_bp: number;
+  type: string;
+  total_trustlines: string;
+  total_shares: string;
+  reserves: { asset: string; amount: string }[];
+  last_modified_ledger: number;
+}
+
+export interface HorizonClaimableBalance {
+  id: string;
+  paging_token: string;
+  asset: string;
+  amount: string;
+  sponsor?: string;
+  claimants: { destination: string; predicate: unknown }[];
+  last_modified_ledger: number;
+}
+
+export interface PriceQuote {
+  base: string;
+  counter: string;
+  price: string;
+  source: string;
+  timestamp: string;
+}
+
+export interface VWAPResult {
+  base: string;
+  counter: string;
+  vwap: string;
+  volume: string;
+  periodMs: number;
+  candles: number;
+  timestamp: string;
+}

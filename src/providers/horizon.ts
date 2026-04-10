@@ -11,6 +11,10 @@ import type {
   HorizonAsset,
   HorizonRoot,
   HorizonLedger,
+  HorizonEffect,
+  HorizonOffer,
+  HorizonLiquidityPool,
+  HorizonClaimableBalance,
 } from "../types.js";
 
 const CACHE_TTL = {
@@ -108,5 +112,34 @@ export class HorizonClient {
 
   async getTradeAggregations(params: Record<string, string>) {
     return this.get<HorizonPage<HorizonTradeAggregation>>("/trade_aggregations", params);
+  }
+
+  async getEffects(accountId: string, limit = 10, order = "desc") {
+    return this.get<HorizonPage<HorizonEffect>>(`/accounts/${accountId}/effects`, {
+      limit: String(limit),
+      order,
+    });
+  }
+
+  async getOffers(accountId: string, limit = 10, order = "desc") {
+    return this.get<HorizonPage<HorizonOffer>>(`/accounts/${accountId}/offers`, {
+      limit: String(limit),
+      order,
+    });
+  }
+
+  async getOperations(accountId: string, limit = 10, order = "desc") {
+    return this.get<HorizonPage<HorizonOperation>>(`/accounts/${accountId}/operations`, {
+      limit: String(limit),
+      order,
+    });
+  }
+
+  async getLiquidityPools(params: Record<string, string>) {
+    return this.get<HorizonPage<HorizonLiquidityPool>>("/liquidity_pools", params);
+  }
+
+  async getClaimableBalances(params: Record<string, string>) {
+    return this.get<HorizonPage<HorizonClaimableBalance>>("/claimable_balances", params);
   }
 }
