@@ -4,6 +4,8 @@ import rateLimit from "express-rate-limit";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import type { Config } from "../config.js";
 import type { HorizonClient } from "../providers/horizon.js";
 import { PriceService } from "../providers/price.js";
@@ -51,10 +53,42 @@ export async function createHttpServer(
   mcpServer: McpServer,
 ): Promise<Express> {
   const app = express();
+  const serverStartTime = Date.now();
   app.use(cors({
     origin: process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(",") : "*",
   }));
-  app.use(rateLimit({ windowMs: 60_000, max: 60, message: { error: "rate_limited" }, keyGenerator: (req) => req.ip || "unknown" }));
+
+  // Per-tool rate limits: free routes get a lower bucket, paid routes get higher.
+  // /mcp is exempt entirely (MCP clients are stateful and may spike legitimately).
+  const freeRouteLimiter = rateLimit({
+    windowMs: 60_000,
+    max: 60,
+    keyGenerator: (req) => req.ip || "unknown",
+    message: { error: "rate_limited" },
+  });
+
+  const paidRouteLimiter = rateLimit({
+    windowMs: 60_000,
+    max: 120,
+    keyGenerator: (req) => req.ip || "unknown",
+    message: { error: "rate_limited" },
+  });
+
+  const FREE_PATHS = new Set([
+    "/health",
+    "/tools/getNetworkStatus",
+    "/pricing",
+    "/skill.md",
+    "/docs",
+    "/openapi.yaml",
+  ]);
+
+  app.use((req, res, next) => {
+    // /mcp is exempt — MCP clients are stateful and bursts are normal
+    if (req.path.startsWith("/mcp")) return next();
+    if (FREE_PATHS.has(req.path)) return freeRouteLimiter(req, res, next);
+    return paidRouteLimiter(req, res, next);
+  });
 
   // Body parser for /mcp POST requests (must be registered before MCP routes)
   app.use(express.json({ limit: "1mb" }));
@@ -94,6 +128,95 @@ export async function createHttpServer(
 
   logger.info("MCP-over-HTTP transport mounted at /mcp");
 
+  // --- Self-service developer documentation ---
+
+  // Serve the OpenAPI spec from disk for Swagger UI / external tooling
+  app.get("/openapi.yaml", async (_req, res) => {
+    try {
+      const specPath = path.join(process.cwd(), "openapi.yaml");
+      const yaml = await readFile(specPath, "utf8");
+      res.type("application/yaml").send(yaml);
+    } catch (err) {
+      logger.error("Failed to serve openapi.yaml", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+      res.status(500).json({ error: "spec_not_available" });
+    }
+  });
+
+  // Self-service developer docs — embeds Swagger UI via public CDN
+  app.get("/docs", (_req, res) => {
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StellarMCP — API Documentation</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+  <style>
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #fafafa; }
+    .header { background: #08090a; color: #fff; padding: 32px 24px; }
+    .header h1 { margin: 0 0 8px 0; font-size: 28px; }
+    .header p { margin: 0; opacity: 0.85; max-width: 800px; }
+    .header a { color: #6cf; text-decoration: none; }
+    .quickstart { padding: 24px; background: #fff; border-bottom: 1px solid #e5e5e5; }
+    .quickstart h2 { margin-top: 0; }
+    .quickstart pre { background: #f6f8fa; padding: 12px 16px; border-radius: 6px; overflow-x: auto; border: 1px solid #e5e5e5; font-size: 13px; }
+    .quickstart code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+    .quickstart .row { display: grid; grid-template-columns: 200px 1fr; gap: 16px; align-items: start; margin-bottom: 12px; }
+    .quickstart .row strong { font-weight: 600; }
+    #swagger-ui { padding-top: 16px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>StellarMCP API</h1>
+    <p>17 MCP tools for Stellar blockchain data, monetized via <a href="https://www.x402.org/">x402</a> micropayments settled on Stellar. Read-only access to accounts, transactions, DEX orderbooks, trade history, asset metadata, normalized prices, and SEP-41 Soroban tokens.</p>
+  </div>
+  <div class="quickstart">
+    <h2>Quick Start</h2>
+    <div class="row">
+      <strong>Free endpoint:</strong>
+      <pre><code>curl http://localhost:4021/tools/getNetworkStatus</code></pre>
+    </div>
+    <div class="row">
+      <strong>List tool prices:</strong>
+      <pre><code>curl http://localhost:4021/pricing</code></pre>
+    </div>
+    <div class="row">
+      <strong>Server health:</strong>
+      <pre><code>curl http://localhost:4021/health</code></pre>
+    </div>
+    <div class="row">
+      <strong>MCP-over-HTTP:</strong>
+      <pre><code>curl -X POST http://localhost:4021/mcp \\
+  -H "Content-Type: application/json" \\
+  -H "Accept: application/json, text/event-stream" \\
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"my-client","version":"1.0.0"}}}'</code></pre>
+    </div>
+    <div class="row">
+      <strong>npm install:</strong>
+      <pre><code>npx stellar-mcp-x402</code></pre>
+    </div>
+  </div>
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script>
+    window.onload = function() {
+      window.ui = SwaggerUIBundle({
+        url: "/openapi.yaml",
+        dom_id: "#swagger-ui",
+        deepLinking: true,
+        presets: [SwaggerUIBundle.presets.apis, SwaggerUIBundle.SwaggerUIStandalonePreset],
+        layout: "StandaloneLayout",
+      });
+    };
+  </script>
+</body>
+</html>`;
+    res.type("html").send(html);
+  });
+
   // x402 payment middleware (when facilitator is configured)
   // MUST be awaited before route registration so middleware runs first
   if (config.stellarPayeeAddress && config.ozFacilitatorUrl && config.ozApiKey) {
@@ -105,7 +228,49 @@ export async function createHttpServer(
   // --- Free endpoints ---
 
   app.get("/health", (_req, res) => {
-    res.json({ status: "ok", network: config.stellarNetwork });
+    const uptimeSeconds = Math.floor((Date.now() - serverStartTime) / 1000);
+    const paidToolCount = Object.keys(TOOL_PRICES).length;
+    const freeToolNames = ["getNetworkStatus"];
+    const x402Configured = !!(
+      config.stellarPayeeAddress &&
+      config.ozFacilitatorUrl &&
+      config.ozApiKey
+    );
+    const payeeShort = config.stellarPayeeAddress
+      ? `${config.stellarPayeeAddress.slice(0, 8)}...${config.stellarPayeeAddress.slice(-4)}`
+      : null;
+
+    res.json({
+      status: "ok",
+      version: "0.2.0",
+      network: config.stellarNetwork,
+      horizonUrl: config.horizonUrl,
+      uptime: uptimeSeconds,
+      tools: {
+        count: paidToolCount + freeToolNames.length,
+        free: freeToolNames,
+        paid: paidToolCount,
+      },
+      transports: {
+        stdio: false,
+        http: true,
+        mcpOverHttp: true,
+      },
+      x402: {
+        enabled: x402Configured,
+        facilitator: config.ozFacilitatorUrl
+          ? new URL(config.ozFacilitatorUrl).hostname
+          : null,
+        payee: payeeShort,
+      },
+      oracles: {
+        sdex: true,
+        reflector: !!config.reflectorContractId,
+      },
+      soroban: {
+        configured: !!config.sorobanRpcUrl,
+      },
+    });
   });
 
   app.get("/tools/getNetworkStatus", async (_req: Request, res: Response) => {

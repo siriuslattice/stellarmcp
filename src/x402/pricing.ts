@@ -17,4 +17,11 @@ export const TOOL_PRICES: Record<string, string> = {
   "/tools/getSorobanTokenInfo": "$0.002",
 };
 
-export const FREE_ROUTES = new Set(["/tools/getNetworkStatus", "/health", "/skill.md", "/mcp"]);
+export const FREE_ROUTES = new Set([
+  "/tools/getNetworkStatus",
+  "/health",
+  "/skill.md",
+  "/mcp",
+  "/docs",
+  "/openapi.yaml",
+]);

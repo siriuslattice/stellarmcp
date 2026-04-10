@@ -29,4 +29,22 @@ export const config = schema.parse({
   reflectorContractId: process.env.REFLECTOR_CONTRACT_ID,
 });
 
+// Mainnet-aware defaults: if URLs not explicitly set in env, pick the canonical
+// endpoint for the configured network. Prevents the footgun where pubnet
+// silently queries testnet.
+const HORIZON_TESTNET_URL = "https://horizon-testnet.stellar.org";
+const HORIZON_PUBNET_URL = "https://horizon.stellar.org";
+const SOROBAN_TESTNET_URL = "https://soroban-testnet.stellar.org";
+const SOROBAN_PUBNET_URL = "https://soroban-rpc.stellar.org";
+
+if (!process.env.HORIZON_URL) {
+  config.horizonUrl =
+    config.stellarNetwork === "pubnet" ? HORIZON_PUBNET_URL : HORIZON_TESTNET_URL;
+}
+
+if (!process.env.SOROBAN_RPC_URL && !config.sorobanRpcUrl) {
+  config.sorobanRpcUrl =
+    config.stellarNetwork === "pubnet" ? SOROBAN_PUBNET_URL : SOROBAN_TESTNET_URL;
+}
+
 export type Config = typeof config;
