@@ -26,6 +26,7 @@
     "keygen": "tsx scripts/keygen.ts",
     "x402:client": "tsx scripts/x402-client.ts",
     "setup:usdc": "tsx scripts/setup-usdc.ts",
+    "test:integration": "TEST_INTEGRATION=1 vitest run tests/integration",
     "x402:stress": "tsx scripts/x402-stress-test.ts"
   },
   "dependencies": {
