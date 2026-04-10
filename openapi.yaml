@@ -1,0 +1,980 @@
+openapi: 3.1.0
+info:
+  title: StellarMCP API
+  version: 0.2.0
+  summary: Stellar blockchain data for AI agents, monetized via x402 on Stellar.
+  description: |
+    StellarMCP exposes read-only Stellar blockchain data (accounts, DEX, assets,
+    liquidity pools, claimable balances) and a normalized Prices API (multi-oracle
+    aggregation, VWAP, OHLC history) as REST endpoints under `/tools/*`.
+
+    Every paid endpoint is gated by the **x402 micropayment protocol**, settled
+    on Stellar testnet (or mainnet) in USDC. Clients receive a `402 Payment
+    Required` response, construct a signed Soroban USDC transfer, and resubmit
+    the request with an `X-Payment` header.
+
+    The same tool catalog is also exposed via the Model Context Protocol (MCP)
+    over stdio and over HTTP at `POST /mcp`.
+  license:
+    name: MIT
+    identifier: MIT
+  contact:
+    name: StellarMCP on GitHub
+    url: https://github.com/siriuslattice/stellarmcp
+servers:
+  - url: http://localhost:4021
+    description: Local development server
+  - url: https://stellarmcp.example.com
+    description: Production deployment (TBD — mainnet launch pending)
+
+tags:
+  - name: account
+    description: Account-scoped Horizon queries (balances, history, effects, operations)
+  - name: dex
+    description: Stellar DEX orderbooks and trade aggregations
+  - name: assets
+    description: Asset metadata (classic and native)
+  - name: pools
+    description: Liquidity pools and claimable balances
+  - name: prices
+    description: Normalized price data, multi-oracle aggregation, VWAP, OHLC
+  - name: network
+    description: Network-wide status and ledger information
+  - name: mcp
+    description: Model Context Protocol over HTTP (JSON-RPC)
+  - name: meta
+    description: Health, pricing, and discovery metadata
+
+security: []
+
+paths:
+  /health:
+    get:
+      tags: [meta]
+      summary: Health check
+      description: Liveness probe. Always free.
+      operationId: getHealth
+      responses:
+        "200":
+          description: Server is healthy.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [ok]
+                  network:
+                    type: string
+                    enum: [testnet, pubnet]
+                required: [status, network]
+              example:
+                status: ok
+                network: testnet
+
+  /pricing:
+    get:
+      tags: [meta]
+      summary: List tool prices
+      description: Returns the full price list for every paid endpoint plus the set of free routes.
+      operationId: getPricing
+      responses:
+        "200":
+          description: Price catalog.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  paid:
+                    type: object
+                    additionalProperties:
+                      type: string
+                      example: "$0.001"
+                  free:
+                    type: array
+                    items: { type: string }
+                  currency:
+                    type: string
+                    example: USD
+                  settlement:
+                    type: string
+                    example: x402 on Stellar
+
+  /skill.md:
+    get:
+      tags: [meta]
+      summary: OpenClaw skill discovery
+      description: Returns the `skill.md` file used by OpenClaw agents for autonomous service discovery.
+      operationId: getSkill
+      responses:
+        "200":
+          description: Markdown skill descriptor.
+          content:
+            text/markdown:
+              schema: { type: string }
+
+  /mcp:
+    post:
+      tags: [mcp]
+      summary: MCP JSON-RPC endpoint
+      description: |
+        Streamable HTTP transport for the Model Context Protocol. Clients send
+        JSON-RPC 2.0 requests (`initialize`, `tools/list`, `tools/call`, etc.).
+        Sessions are stateful: the server issues an `mcp-session-id` header on
+        `initialize` that clients must echo on subsequent requests.
+      operationId: mcpRequest
+      parameters:
+        - in: header
+          name: mcp-session-id
+          schema: { type: string, format: uuid }
+          required: false
+          description: Session identifier returned by the initial `initialize` call.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: JSON-RPC 2.0 request envelope
+              example:
+                jsonrpc: "2.0"
+                id: 1
+                method: tools/list
+                params: {}
+      responses:
+        "200":
+          description: JSON-RPC response.
+          content:
+            application/json:
+              schema: { type: object }
+    get:
+      tags: [mcp]
+      summary: MCP SSE stream
+      description: Server-Sent Events stream for server-initiated MCP messages.
+      operationId: mcpStream
+      parameters:
+        - in: header
+          name: mcp-session-id
+          schema: { type: string, format: uuid }
+          required: true
+      responses:
+        "200":
+          description: SSE stream.
+          content:
+            text/event-stream:
+              schema: { type: string }
+    delete:
+      tags: [mcp]
+      summary: Close MCP session
+      operationId: mcpClose
+      parameters:
+        - in: header
+          name: mcp-session-id
+          schema: { type: string, format: uuid }
+          required: true
+      responses:
+        "204":
+          description: Session closed.
+
+  /tools/getNetworkStatus:
+    get:
+      tags: [network]
+      summary: Stellar network status (free)
+      description: Returns the current Horizon/Core version, protocol version, and latest ledger. Always free — used by agents for service discovery.
+      operationId: getNetworkStatus
+      responses:
+        "200":
+          description: Network status.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NetworkStatus" }
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /tools/getAccount:
+    get:
+      tags: [account]
+      summary: Get Stellar account
+      description: Returns balances, sequence, and signers for a Stellar account.
+      operationId: getAccount
+      security: [{ x402: [] }]
+      x-x402-price: "$0.001"
+      parameters:
+        - $ref: "#/components/parameters/AccountIdQuery"
+      responses:
+        "200":
+          description: Account details.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Account" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/ServerError" }
+
+  /tools/getTransactions:
+    get:
+      tags: [account]
+      summary: List account transactions
+      description: Returns the most recent transactions for an account (newest first).
+      operationId: getTransactions
+      security: [{ x402: [] }]
+      x-x402-price: "$0.001"
+      parameters:
+        - $ref: "#/components/parameters/AccountIdQuery"
+        - $ref: "#/components/parameters/Limit50"
+      responses:
+        "200":
+          description: Transactions list.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Transaction" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/ServerError" }
+
+  /tools/getPayments:
+    get:
+      tags: [account]
+      summary: List account payments
+      description: Returns payment operations affecting an account.
+      operationId: getPayments
+      security: [{ x402: [] }]
+      x-x402-price: "$0.001"
+      parameters:
+        - $ref: "#/components/parameters/AccountIdQuery"
+        - $ref: "#/components/parameters/Limit50"
+      responses:
+        "200":
+          description: Payments list.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Payment" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "500": { $ref: "#/components/responses/ServerError" }
+
+  /tools/getOrderbook:
+    get:
+      tags: [dex]
+      summary: Get SDEX orderbook
+      description: Returns bids, asks, spread, and mid-price for a Stellar DEX pair.
+      operationId: getOrderbook
+      security: [{ x402: [] }]
+      x-x402-price: "$0.002"
+      parameters:
+        - in: query
+          name: sellingAsset
+          required: true
+          schema: { $ref: "#/components/schemas/Asset" }
+          description: Asset the orderbook side is selling.
+          example: XLM
+        - in: query
+          name: buyingAsset
+          required: true
+          schema: { $ref: "#/components/schemas/Asset" }
+          example: "USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 20
+      responses:
+        "200":
+          description: Orderbook snapshot.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Orderbook" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "500": { $ref: "#/components/responses/ServerError" }
+
+  /tools/getTradeAggregations:
+    get:
+      tags: [dex]
+      summary: OHLC trade aggregations
+      description: Returns OHLC candles from Stellar DEX trade aggregations.
+      operationId: getTradeAggregations
+      security: [{ x402: [] }]
+      x-x402-price: "$0.002"
+      parameters:
+        - $ref: "#/components/parameters/BaseAsset"
+        - $ref: "#/components/parameters/CounterAsset"
+        - $ref: "#/components/parameters/ResolutionQuery"
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 24
+      responses:
+        "200":
+          description: Candle list.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Candle" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "500": { $ref: "#/components/responses/ServerError" }
+
+  /tools/getAssetInfo:
+    get:
+      tags: [assets]
+      summary: Get asset metadata
+      description: Returns supply, account count, and flags for a Stellar asset. Omit `assetIssuer` for XLM.
+      operationId: getAssetInfo
+      security: [{ x402: [] }]
+      x-x402-price: "$0.001"
+      parameters:
+        - in: query
+          name: assetCode
+          required: true
+          schema:
+            type: string
+            pattern: "^[A-Za-z0-9]{1,12}$"
+          example: USDC
+        - in: query
+          name: assetIssuer
+          required: false
+          schema: { $ref: "#/components/schemas/StellarAddress" }
+          description: Omit entirely when `assetCode=XLM`.
+      responses:
+        "200":
+          description: Asset metadata. Returns a single object for XLM, an array otherwise.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/AssetInfo"
+                  - type: array
+                    items: { $ref: "#/components/schemas/AssetInfo" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+
+  /tools/getLedger:
+    get:
+      tags: [network]
+      summary: Get ledger by sequence
+      description: Returns details for a specific Stellar ledger. If `sequence` is omitted, returns the latest ledger.
+      operationId: getLedger
+      security: [{ x402: [] }]
+      x-x402-price: "$0.001"
+      parameters:
+        - in: query
+          name: sequence
+          required: false
+          schema: { type: integer, minimum: 1 }
+          example: 1234567
+      responses:
+        "200":
+          description: Ledger details.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ledger" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+
+  /tools/getEffects:
+    get:
+      tags: [account]
+      summary: List account effects
+      description: Returns ledger effects (balance changes, trustline updates, etc.) for an account.
+      operationId: getEffects
+      security: [{ x402: [] }]
+      x-x402-price: "$0.001"
+      parameters:
+        - $ref: "#/components/parameters/AccountIdQuery"
+        - $ref: "#/components/parameters/Limit50"
+      responses:
+        "200":
+          description: Effects list.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Effect" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "500": { $ref: "#/components/responses/ServerError" }
+
+  /tools/getOffers:
+    get:
+      tags: [account]
+      summary: List account DEX offers
+      description: Returns open DEX offers for an account.
+      operationId: getOffers
+      security: [{ x402: [] }]
+      x-x402-price: "$0.001"
+      parameters:
+        - $ref: "#/components/parameters/AccountIdQuery"
+        - $ref: "#/components/parameters/Limit50"
+      responses:
+        "200":
+          description: Offers list.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Offer" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "500": { $ref: "#/components/responses/ServerError" }
+
+  /tools/getOperations:
+    get:
+      tags: [account]
+      summary: List account operations
+      description: Returns all Horizon operations for an account (payments, manage offers, create account, etc.).
+      operationId: getOperations
+      security: [{ x402: [] }]
+      x-x402-price: "$0.001"
+      parameters:
+        - $ref: "#/components/parameters/AccountIdQuery"
+        - $ref: "#/components/parameters/Limit50"
+      responses:
+        "200":
+          description: Operations list.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Operation" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "500": { $ref: "#/components/responses/ServerError" }
+
+  /tools/getLiquidityPools:
+    get:
+      tags: [pools]
+      summary: List liquidity pools
+      description: Returns Stellar AMM liquidity pools. Optionally filter by participating account.
+      operationId: getLiquidityPools
+      security: [{ x402: [] }]
+      x-x402-price: "$0.002"
+      parameters:
+        - in: query
+          name: account
+          required: false
+          schema: { $ref: "#/components/schemas/StellarAddress" }
+          description: Filter pools where this account holds shares.
+        - $ref: "#/components/parameters/Limit50"
+      responses:
+        "200":
+          description: Pools list.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/LiquidityPool" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "500": { $ref: "#/components/responses/ServerError" }
+
+  /tools/getClaimableBalances:
+    get:
+      tags: [pools]
+      summary: List claimable balances
+      description: Returns claimable balance entries. Optionally filter by claimant address or asset.
+      operationId: getClaimableBalances
+      security: [{ x402: [] }]
+      x-x402-price: "$0.001"
+      parameters:
+        - in: query
+          name: claimant
+          required: false
+          schema: { $ref: "#/components/schemas/StellarAddress" }
+        - in: query
+          name: asset
+          required: false
+          schema: { $ref: "#/components/schemas/Asset" }
+          description: Asset filter. Use `XLM` for native or `CODE:ISSUER`.
+        - $ref: "#/components/parameters/Limit50"
+      responses:
+        "200":
+          description: Claimable balances list.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ClaimableBalance" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "500": { $ref: "#/components/responses/ServerError" }
+
+  /tools/getPrice:
+    get:
+      tags: [prices]
+      summary: Normalized spot price
+      description: |
+        Returns the current normalized spot price for a base/counter pair,
+        aggregated across multiple oracles (Stellar SDEX, Reflector). The
+        response includes per-source attribution in `sources[]`.
+      operationId: getPrice
+      security: [{ x402: [] }]
+      x-x402-price: "$0.002"
+      parameters:
+        - $ref: "#/components/parameters/BaseAsset"
+        - $ref: "#/components/parameters/CounterAsset"
+      responses:
+        "200":
+          description: Aggregated spot price.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PriceQuote" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "500": { $ref: "#/components/responses/ServerError" }
+
+  /tools/getPriceHistory:
+    get:
+      tags: [prices]
+      summary: OHLC price history
+      description: Returns OHLC candles for the base/counter pair at the given resolution.
+      operationId: getPriceHistory
+      security: [{ x402: [] }]
+      x-x402-price: "$0.002"
+      parameters:
+        - $ref: "#/components/parameters/BaseAsset"
+        - $ref: "#/components/parameters/CounterAsset"
+        - $ref: "#/components/parameters/ResolutionQuery"
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 24
+      responses:
+        "200":
+          description: Price history.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Candle" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "500": { $ref: "#/components/responses/ServerError" }
+
+  /tools/getVWAP:
+    get:
+      tags: [prices]
+      summary: Volume-weighted average price
+      description: Returns a volume-weighted average price (VWAP) for the base/counter pair over the recent candle window.
+      operationId: getVWAP
+      security: [{ x402: [] }]
+      x-x402-price: "$0.002"
+      parameters:
+        - $ref: "#/components/parameters/BaseAsset"
+        - $ref: "#/components/parameters/CounterAsset"
+        - $ref: "#/components/parameters/ResolutionQuery"
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 24
+      responses:
+        "200":
+          description: VWAP result.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VWAPResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "500": { $ref: "#/components/responses/ServerError" }
+
+components:
+  securitySchemes:
+    x402:
+      type: apiKey
+      in: header
+      name: X-Payment
+      description: |
+        x402 micropayment protocol settled on Stellar testnet/mainnet.
+        Clients receive a 402 Payment Required response with payment requirements
+        in the X-Payment-Required header (base64-encoded JSON), construct a Soroban
+        USDC transfer transaction, sign auth entries, and resubmit with the
+        X-Payment header containing the signed payload.
+
+  parameters:
+    AccountIdQuery:
+      in: query
+      name: accountId
+      required: true
+      schema: { $ref: "#/components/schemas/StellarAddress" }
+      example: GAQB35PQQ5Z7BVOFQE5F2AAAYGU34OIMON5NDJEMIQBEBY46WWHOCLJN
+    Limit50:
+      in: query
+      name: limit
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 50
+        default: 10
+    BaseAsset:
+      in: query
+      name: baseAsset
+      required: true
+      schema: { $ref: "#/components/schemas/Asset" }
+      example: XLM
+    CounterAsset:
+      in: query
+      name: counterAsset
+      required: true
+      schema: { $ref: "#/components/schemas/Asset" }
+      example: "USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
+    ResolutionQuery:
+      in: query
+      name: resolution
+      required: false
+      schema: { $ref: "#/components/schemas/Resolution" }
+
+  responses:
+    BadRequest:
+      description: Invalid request parameters.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: "invalid accountId" }
+    PaymentRequired:
+      description: |
+        x402 payment required. The `X-Payment-Required` header contains
+        base64-encoded payment requirements. Resubmit with a signed `X-Payment`
+        header to receive the data.
+      headers:
+        X-Payment-Required:
+          description: Base64-encoded JSON payment requirements.
+          schema: { type: string }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: "payment required" }
+    NotFound:
+      description: Resource not found on Horizon.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: "Not found" }
+    RateLimited:
+      description: Rate limit exceeded (client or upstream Horizon).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: "Rate limited — try again later" }
+    ServerError:
+      description: Internal server error.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: "Internal server error" }
+
+  schemas:
+    StellarAddress:
+      type: string
+      description: Stellar ed25519 public key in Base32 StrKey encoding.
+      pattern: "^G[A-Z2-7]{55}$"
+      example: GAQB35PQQ5Z7BVOFQE5F2AAAYGU34OIMON5NDJEMIQBEBY46WWHOCLJN
+
+    Asset:
+      type: string
+      description: |
+        Either the literal `XLM` for the native asset, or a `CODE:ISSUER`
+        string where `CODE` is 1-12 alphanumeric characters and `ISSUER`
+        is a Stellar G-address.
+      pattern: "^(XLM|[A-Za-z0-9]{1,12}:G[A-Z2-7]{55})$"
+      example: "USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
+
+    Resolution:
+      type: string
+      enum: [1m, 5m, 15m, 1h, 1d, 1w]
+      default: 1h
+      description: Candle bucket width.
+
+    Balance:
+      type: object
+      properties:
+        asset:
+          oneOf:
+            - { type: string, enum: [XLM] }
+            - { $ref: "#/components/schemas/Asset" }
+        balance: { type: string, description: Balance as a stringified decimal number (7 decimals). }
+        limit: { type: [string, "null"], nullable: true }
+      required: [asset, balance]
+
+    Account:
+      type: object
+      properties:
+        address: { $ref: "#/components/schemas/StellarAddress" }
+        sequence: { type: string, example: "151922503909408770" }
+        balances:
+          type: array
+          items: { $ref: "#/components/schemas/Balance" }
+        thresholds:
+          type: object
+          properties:
+            low_threshold: { type: integer }
+            med_threshold: { type: integer }
+            high_threshold: { type: integer }
+        signerCount: { type: integer, example: 1 }
+      required: [address, sequence, balances, thresholds, signerCount]
+
+    Transaction:
+      type: object
+      properties:
+        hash: { type: string, example: "a9f8..." }
+        ledger: { type: integer }
+        createdAt: { type: string, format: date-time }
+        fee: { type: string, description: Fee charged in stroops. }
+        opCount: { type: integer }
+        successful: { type: boolean }
+        memo: { type: [string, "null"], nullable: true }
+      required: [hash, ledger, createdAt, fee, opCount, successful]
+
+    Payment:
+      type: object
+      properties:
+        type: { type: string, example: payment }
+        from: { type: string }
+        to: { type: [string, "null"], nullable: true }
+        asset:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+          nullable: true
+        amount: { type: [string, "null"], nullable: true }
+        createdAt: { type: string, format: date-time }
+      required: [type, from, createdAt]
+
+    OrderbookEntry:
+      type: object
+      properties:
+        price: { type: string, example: "0.1234567" }
+        amount: { type: string, example: "100.0000000" }
+      required: [price, amount]
+
+    Orderbook:
+      type: object
+      properties:
+        bids:
+          type: array
+          items: { $ref: "#/components/schemas/OrderbookEntry" }
+        asks:
+          type: array
+          items: { $ref: "#/components/schemas/OrderbookEntry" }
+        spread:
+          type: [string, "null"]
+          nullable: true
+          description: Lowest ask minus highest bid (7 decimals). Null if either side is empty.
+        midPrice:
+          type: [string, "null"]
+          nullable: true
+          description: Midpoint between lowest ask and highest bid.
+      required: [bids, asks]
+
+    Candle:
+      type: object
+      properties:
+        timestamp: { type: string, description: Bucket start time (ms since epoch, as string). }
+        open: { type: string }
+        high: { type: string }
+        low: { type: string }
+        close: { type: string }
+        baseVolume: { type: string }
+        counterVolume: { type: string }
+        tradeCount: { type: integer }
+        avg: { type: string }
+      required: [timestamp, open, high, low, close, baseVolume, counterVolume, tradeCount, avg]
+
+    OracleSource:
+      type: object
+      properties:
+        name: { type: string, example: sdex }
+        price: { type: string, example: "0.1234567" }
+        timestamp: { type: string, format: date-time }
+      required: [name, price, timestamp]
+
+    PriceQuote:
+      type: object
+      properties:
+        base: { $ref: "#/components/schemas/Asset" }
+        counter: { $ref: "#/components/schemas/Asset" }
+        price: { type: string, description: Aggregated price across available oracles. }
+        sources:
+          type: array
+          description: Per-oracle price readings contributing to the aggregate.
+          items: { $ref: "#/components/schemas/OracleSource" }
+        timestamp: { type: string, format: date-time }
+      required: [base, counter, price, sources, timestamp]
+
+    VWAPResult:
+      type: object
+      properties:
+        base: { $ref: "#/components/schemas/Asset" }
+        counter: { $ref: "#/components/schemas/Asset" }
+        vwap: { type: string, description: Volume-weighted average price across the candle window. }
+        volume: { type: string, description: Total base volume in the window. }
+        candles:
+          type: array
+          items: { $ref: "#/components/schemas/Candle" }
+        timestamp: { type: string, format: date-time }
+      required: [base, counter, vwap, volume, candles, timestamp]
+
+    Effect:
+      type: object
+      properties:
+        id: { type: string }
+        type: { type: string, example: account_credited }
+        account: { $ref: "#/components/schemas/StellarAddress" }
+        createdAt: { type: string, format: date-time }
+      required: [id, type, account, createdAt]
+
+    Offer:
+      type: object
+      properties:
+        id: { type: string }
+        seller: { $ref: "#/components/schemas/StellarAddress" }
+        selling: { $ref: "#/components/schemas/Asset" }
+        buying: { $ref: "#/components/schemas/Asset" }
+        amount: { type: string }
+        price: { type: string }
+        lastModifiedLedger: { type: integer }
+      required: [id, seller, selling, buying, amount, price, lastModifiedLedger]
+
+    Operation:
+      type: object
+      description: Horizon operation record. Extra fields (from/to/amount/asset) appear for payment-like operations.
+      properties:
+        id: { type: string }
+        type: { type: string, example: payment }
+        sourceAccount: { $ref: "#/components/schemas/StellarAddress" }
+        createdAt: { type: string, format: date-time }
+        transactionHash: { type: string }
+        from: { type: string }
+        to: { type: string }
+        amount: { type: string }
+        asset:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+          nullable: true
+      required: [id, type, sourceAccount, createdAt, transactionHash]
+
+    LiquidityPoolReserve:
+      type: object
+      properties:
+        asset: { type: string, description: "Asset string (`native` or `CODE:ISSUER`)." }
+        amount: { type: string }
+      required: [asset, amount]
+
+    LiquidityPool:
+      type: object
+      properties:
+        id: { type: string }
+        fee: { type: integer, description: Fee in basis points. }
+        totalTrustlines: { type: string }
+        totalShares: { type: string }
+        reserves:
+          type: array
+          items: { $ref: "#/components/schemas/LiquidityPoolReserve" }
+      required: [id, fee, totalTrustlines, totalShares, reserves]
+
+    ClaimableBalanceClaimant:
+      type: object
+      properties:
+        destination: { $ref: "#/components/schemas/StellarAddress" }
+        predicate: { type: object, additionalProperties: true }
+      required: [destination, predicate]
+
+    ClaimableBalance:
+      type: object
+      properties:
+        id: { type: string }
+        amount: { type: string }
+        asset: { type: string, description: "`native` or `CODE:ISSUER`." }
+        sponsor: { type: [string, "null"], nullable: true }
+        claimants:
+          type: array
+          items: { $ref: "#/components/schemas/ClaimableBalanceClaimant" }
+        lastModifiedLedger: { type: integer }
+      required: [id, amount, asset, claimants, lastModifiedLedger]
+
+    AssetFlags:
+      type: object
+      properties:
+        authRequired: { type: boolean }
+        authRevocable: { type: boolean }
+        authImmutable: { type: boolean }
+        authClawbackEnabled: { type: boolean }
+      required: [authRequired, authRevocable, authImmutable, authClawbackEnabled]
+
+    AssetInfo:
+      type: object
+      properties:
+        code: { type: string, example: USDC }
+        issuer:
+          oneOf:
+            - { $ref: "#/components/schemas/StellarAddress" }
+            - { type: "null" }
+          nullable: true
+        type:
+          type: string
+          enum: [native, credit_alphanum4, credit_alphanum12]
+        totalSupply: { type: string }
+        numAccounts:
+          type: [integer, "null"]
+          nullable: true
+        flags: { $ref: "#/components/schemas/AssetFlags" }
+      required: [code, type, totalSupply, flags]
+
+    NetworkStatus:
+      type: object
+      properties:
+        network: { type: string, enum: [testnet, pubnet] }
+        horizonVersion: { type: string, example: "22.0.0" }
+        coreVersion: { type: string, example: "stellar-core 22.0.0" }
+        protocolVersion: { type: integer, example: 22 }
+        latestLedger: { type: integer, example: 1234567 }
+        closedAt: { type: string, format: date-time }
+        networkPassphrase:
+          type: string
+          example: "Test SDF Network ; September 2015"
+      required: [network, horizonVersion, coreVersion, protocolVersion, latestLedger, closedAt, networkPassphrase]
+
+    Ledger:
+      type: object
+      properties:
+        sequence: { type: integer }
+        hash: { type: string }
+        closedAt: { type: string, format: date-time }
+        txCount: { type: integer }
+        opCount: { type: integer }
+        baseFee: { type: integer, description: Base fee in stroops. }
+        totalCoins: { type: string }
+        protocolVersion: { type: integer }
+      required: [sequence, hash, closedAt, txCount, opCount, baseFee, totalCoins, protocolVersion]
+
+    Error:
+      type: object
+      properties:
+        error: { type: string, description: Sanitized error message. }
+      required: [error]
+      additionalProperties: false

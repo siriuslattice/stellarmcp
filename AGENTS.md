@@ -8,6 +8,8 @@
 
 ## Capabilities
 - **Reads**: Stellar accounts, transactions, payments, DEX orderbooks, trade aggregations, asset metadata, network status, ledger details, effects, offers, operations, liquidity pools, claimable balances, normalized prices, VWAP
+- **Prices**: Multi-oracle aggregation (SdexOracle + ReflectorOracle) with median computation and per-source attribution (`sources[]` in responses)
+- **Transports**: stdio, HTTP REST (x402-gated), MCP-over-HTTP at `/mcp` (StreamableHTTPServerTransport, stateful sessions)
 - **Writes**: None (read-only)
 - **Settlement**: x402 on Stellar (USDC)
 
@@ -29,6 +31,13 @@ Full Model Context Protocol server with 16 tools. Connect via any MCP client.
   }
 }
 ```
+
+### MCP-over-HTTP (remote)
+Connect via HTTP at POST /mcp using the MCP StreamableHTTP transport.
+Stateful sessions via mcp-session-id header.
+
+Example: An MCP client points to http://localhost:4021/mcp instead of stdio.
+All 16 tools are accessible — same instance as stdio.
 
 ### HTTP REST (x402-gated)
 Each tool exposed as a GET endpoint. Paid endpoints require x402 payment header.
@@ -53,6 +62,9 @@ Each tool exposed as a GET endpoint. Paid endpoints require x402 payment header.
 | GET /tools/getVWAP | $0.002 | baseAsset, counterAsset, resolution?, limit? |
 | GET /pricing | free | — |
 | GET /health | free | — |
+| POST /mcp | free | MCP-over-HTTP JSON-RPC (StreamableHTTPServerTransport) |
+| GET /mcp | free | SSE stream for server-initiated MCP messages |
+| DELETE /mcp | free | Terminate MCP-over-HTTP session |
 
 ## Discovery
 - **OpenClaw**: Served at `GET /skill.md`

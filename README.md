@@ -10,8 +10,10 @@ Built for the [Stellar Hacks: Agents](https://dorahacks.io/hackathon/stellar-hac
 
 - **16 MCP tools** querying the Stellar Horizon REST API
 - **PriceService** with VWAP, OHLC history, and oracle abstraction layer
+- **Multi-oracle price aggregation** with median computation and source attribution across SDEX and Reflector
 - **x402 micropayments** on Stellar — agents pay per call in USDC
-- **Dual transport** — stdio for MCP clients, HTTP REST for x402-gated access
+- **Triple transport** — stdio for local MCP clients, HTTP REST for x402-gated access, MCP-over-HTTP at `/mcp` for remote MCP clients
+- **MCP-over-HTTP transport at `/mcp`** for remote MCP clients (StreamableHTTPServerTransport with stateful sessions)
 - **Earn/spend demo** — agent earns USDC selling data, spends USDC on external services
 - **OpenClaw registered** — permissionless agent discovery via `GET /skill.md`
 - **Zero dependencies on `@stellar/stellar-sdk`** — raw `fetch` to Horizon
@@ -40,6 +42,20 @@ Or add to your MCP client config:
 }
 ```
 
+### MCP Client (HTTP — remote)
+
+Connect to a running StellarMCP HTTP server from any MCP client that supports the StreamableHTTP transport. Point your client at `http://<host>:4021/mcp` — the same McpServer instance with all 16 tools is shared between the stdio and HTTP transports.
+
+```bash
+# Start the HTTP server (also serves /mcp)
+TRANSPORT=http pnpm start
+
+# MCP clients connect via POST/GET/DELETE http://localhost:4021/mcp
+# Stateful sessions are tracked via the mcp-session-id header.
+```
+
+The `/mcp` endpoint is free (not x402-gated). Per-tool x402 gating applies to the REST endpoints under `/tools/*`.
+
 ### HTTP Server (x402-monetized)
 
 ```bash
@@ -61,6 +77,10 @@ curl http://localhost:4021/tools/getAccount?accountId=GAAZI4TCR3TY5OJHCTJC2A4QSY
 
 # View pricing
 curl http://localhost:4021/pricing
+
+# Connect an MCP client via MCP-over-HTTP
+# POST http://localhost:4021/mcp  (JSON-RPC)
+# GET  http://localhost:4021/mcp  (SSE stream)
 ```
 
 ## Tools
@@ -87,11 +107,11 @@ curl http://localhost:4021/pricing
 
 | Tool | Description | Price |
 |------|-------------|-------|
-| `getPrice` | Current price for any Stellar asset pair | $0.002 |
+| `getPrice` | Current price for any Stellar asset pair with multi-oracle aggregation (median + `sources[]` attribution) | $0.002 |
 | `getPriceHistory` | OHLC price history with VWAP | $0.002 |
 | `getVWAP` | Volume-weighted average price | $0.002 |
 
-The price tools are powered by PriceService, which aggregates data from the Stellar SDEX via trade aggregations. The oracle abstraction layer supports multiple price sources (SDEX, Reflector) with source attribution.
+The price tools are powered by PriceService, which aggregates data from the Stellar SDEX via trade aggregations. A PriceAggregator layer combines multiple oracle sources (currently SdexOracle + ReflectorOracle stub) and returns a median price along with a `sources[]` array containing `{name, price, timestamp}` entries for full attribution. Additional oracles (Chainlink, Redstone, Band) plug into the same OracleProvider interface.
 
 ## Asset Format
 
@@ -132,20 +152,19 @@ pnpm inspect      # Open MCP Inspector at localhost:6274
 ## Architecture
 
 ```
-                                                   +--> PriceService ──> OracleProvider(s)
-                                                   |
 stdio transport ──> McpServer ──> 16 tools ──> HorizonClient ──> Stellar Horizon REST API
-                                                   |
-HTTP transport  ──> Express ──> x402 middleware ────+
-                       |
-                       +-- /tools/* (paid endpoints)
-                       +-- /tools/getNetworkStatus (free)
-                       +-- /health (free)
-                       +-- /pricing (free)
-                       +-- /skill.md (OpenClaw discovery)
+                        │                          │
+                        │                          ├── PriceService
+HTTP transport  ──> Express ──┬── /tools/* (REST + x402)
+                              ├── /mcp (StreamableHTTPServerTransport)
+                              └── /pricing, /health, /skill.md (free)
+                        │
+                        └── PriceAggregator → [SdexOracle, ReflectorOracle]
 ```
 
-The PriceService sits on top of HorizonClient and provides normalized price data (current price, OHLC history, VWAP) through an oracle abstraction layer. The SDEX oracle queries Horizon trade aggregations; future oracles (Reflector, Chainlink) plug in via the same OracleProvider interface.
+Both the stdio and HTTP transports share the **same McpServer instance** with all 16 tools registered. The `/mcp` endpoint is a MCP-over-HTTP bridge (POST/GET/DELETE) using `StreamableHTTPServerTransport` with stateful sessions tracked via the `mcp-session-id` header — giving remote MCP clients the full protocol (tools, resources, prompts) without stdio.
+
+The PriceService sits on top of HorizonClient and provides normalized price data (current price, OHLC history, VWAP). The PriceAggregator layer fans out queries to multiple OracleProviders (SdexOracle + ReflectorOracle today) and computes a median with per-source attribution. Additional oracles (Chainlink, Redstone) plug in via the same interface.
 
 ## Tech Stack
 
@@ -171,7 +190,8 @@ See [.env.example](.env.example) for all options.
 | `OZ_API_KEY` | HTTP mode | — | OpenZeppelin facilitator API key |
 | `PORT` | No | `4021` | HTTP server port |
 | `LOG_LEVEL` | No | `info` | `debug`, `info`, `warn`, `error` |
-| `SOROBAN_RPC_URL` | No | — | Soroban RPC URL (for future SEP-41 token support) |
+| `SOROBAN_RPC_URL` | No | — | Soroban RPC URL (used by ReflectorOracle and future SEP-41 support) |
+| `REFLECTOR_CONTRACT_ID` | No | — | Reflector oracle contract ID on Stellar (enables ReflectorOracle in PriceAggregator) |
 
 ## License
 
